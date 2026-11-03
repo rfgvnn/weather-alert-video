@@ -486,6 +486,9 @@ _ORG_RE = re.compile(
 )
 _SIGNAL_RE = re.compile(r"([\u4e00-\u9fa5]{2,12}?(?:预警信号|预警))")
 
+# 发布日期：如「2026年10月19日」，年份可省略
+_DATE_RE = re.compile(r"(?:\d{2,4}年)?\d{1,2}月\d{1,2}日")
+
 
 def extract_alert_title(text: str) -> str:
     """
@@ -516,6 +519,18 @@ def extract_alert_title(text: str) -> str:
     return f"{org}发布{m2.group(1)}"
 
 
+def extract_alert_date(text: str) -> str:
+    """
+    从文本开头提取发布日期，如「2026年10月19日」（年份可省略）。
+    只在开头 80 字符内找第一处日期，找不到返回空串。
+    """
+    s = (text or "").strip()
+    if not s:
+        return ""
+    m = _DATE_RE.search(s[:80])
+    return m.group(0) if m else ""
+
+
 def target_size(info: VideoInfo, opts: RenderOptions) -> tuple[int, int]:
     th = {"source": 0, "1080": 1080, "720": 720}.get(opts.resolution, 0)
     if th and info.height and th < info.height:
@@ -540,11 +555,12 @@ def build_video(
     style: TextStyle | None = None,
     signal: SignalStyle | None = None,
     corner_text: str = "",
+    date_text: str = "",
     workdir: str | None = None,
 ) -> dict[str, Any]:
     """
     把语音作为音轨合成进视频，处理长度对齐，
-    并可选在画面中央叠加文字、左上角叠加预警图标、右上角叠加标题。
+    并可选叠加底部正文、左上角预警图标、右上角标题和发布日期。
     返回本次渲染的描述信息（供结果展示）。
     """
     style = style or TextStyle(enabled=False)
@@ -579,12 +595,25 @@ def build_video(
     fs = 0
     if style.enabled and (style.text or "").strip():
         fs = font_size(out_w, style.size)
-        max_units = max(6.0, (out_w * 0.80) / fs)
+        max_units = max(6.0, (out_w * 0.84) / fs)
         lines = caption.wrap_text(style.text, max_units)
         workdir = style.workdir or tempfile.mkdtemp(prefix="ttslines_")
         line_files = caption.write_line_files(lines, os.path.join(workdir, "lines"))
         n_lines = len(line_files)
-        vf += caption.build_caption_filters(out_w, out_h, line_files, fs, style.opacity)
+        vf += caption.build_caption_filters(out_w, out_h, line_files, fs)
+
+    # ---- 左上角预警图标（先算尺寸，供日期行避让） ----
+    icon = signal if (signal and signal.path and os.path.exists(signal.path)) else None
+    ico_w = ico_h = mx = my = 0
+    if icon:
+        try:
+            src_w, src_h = probe_image_size(icon.path)
+        except TaskError:  # noqa: BLE001
+            src_w, src_h = 380, 323
+        ico_w = max(4, int(round(out_w * icon.size / 2)) * 2)
+        ico_h = max(4, int(round(ico_w * src_h / src_w / 2)) * 2)
+        mx = max(2, int(round(out_w * icon.margin_x)))
+        my = max(2, int(round(out_h * icon.margin_y)))
 
     # ---- 右上角标题：XX气象台发布XX预警信号（分两行、右对齐）----
     t_lines = 0
@@ -597,18 +626,16 @@ def build_video(
         t_lines = len(t_files)
         vf += caption.build_corner_filters(out_w, out_h, t_files, t_fs)
 
-    # ---- 左上角预警图标 ----
-    icon = signal if (signal and signal.path and os.path.exists(signal.path)) else None
-    ico_w = ico_h = mx = 0
-    if icon:
-        try:
-            src_w, src_h = probe_image_size(icon.path)
-        except TaskError:  # noqa: BLE001
-            src_w, src_h = 380, 323
-        ico_w = max(4, int(round(out_w * icon.size / 2)) * 2)
-        ico_h = max(4, int(round(ico_w * src_h / src_w / 2)) * 2)
-        mx = max(2, int(round(out_w * icon.margin_x)))
-        my = max(2, int(round(out_h * icon.margin_y)))
+    # ---- 发布日期：金色居中，显示在标题块下方，并避开左上角图标 ----
+    d_fs = 0
+    if (date_text or "").strip():
+        d_fs = max(14, int(round(out_w / 32)))
+        wd = workdir or style.workdir or tempfile.mkdtemp(prefix="ttslines_")
+        d_files = caption.write_line_files([date_text.strip()], os.path.join(wd, "date"))
+        date_y = caption.title_block_bottom(out_h, t_lines, t_fs) + t_fs * 0.55
+        if icon:
+            date_y = max(date_y, my + ico_h + t_fs * 0.30)
+        vf += caption.build_date_filter(out_w, out_h, d_files[0], d_fs, date_y)
 
     reencode = bool(vf) or bool(icon)
 
@@ -808,6 +835,7 @@ def generate(
 
     # 右上角标题：只从文本开头提取，提取不到就不贴
     corner_title = extract_alert_title(text) if title_enabled else ""
+    corner_date = extract_alert_date(text) if title_enabled else ""
 
     tmpdir = workdir or tempfile.mkdtemp(prefix="ttsvideo_")
     os.makedirs(tmpdir, exist_ok=True)
@@ -868,7 +896,7 @@ def generate(
         tick(p0 + 10, f"正在合成 → {rule['label']}（{strategy}{extras}）")
         render = build_video(
             rule["video"], audio_path, out_path, info, audio_dur, opts, style, sig,
-            corner_text=corner_title, workdir=tmpdir,
+            corner_text=corner_title, date_text=corner_date, workdir=tmpdir,
         )
 
         if not os.path.exists(out_path) or os.path.getsize(out_path) == 0:
