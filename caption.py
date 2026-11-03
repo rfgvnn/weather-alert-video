@@ -347,8 +347,8 @@ def build_corner_filters(
     line_files: list[str],
     fontsize: int,
     opacity: float = 0.45,
-    margin_x: float = 0.05,
-    margin_y: float = 0.06,
+    margin_x: float = 0.1,
+    margin_y: float = 0.12,
     bg_color: str = "0x000000",
 ) -> list[str]:
     """

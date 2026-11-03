@@ -590,7 +590,7 @@ def build_video(
     t_lines = 0
     t_fs = 0
     if (corner_text or "").strip():
-        t_fs = max(14, int(round(out_w / 40)))
+        t_fs = max(14, int(round(out_w / 30)))
         lines_top = caption.split_title_lines(corner_text)
         wd = workdir or style.workdir or tempfile.mkdtemp(prefix="ttslines_")
         t_files = caption.write_line_files(lines_top, os.path.join(wd, "title"))
