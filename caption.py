@@ -266,31 +266,43 @@ def build_caption_filters(
     height: int,
     line_files: list[str],
     fontsize: int,
+    opacity: float,
+    bg_color: str = "0x404040",
 ) -> list[str]:
     """
-    底部正文：无底板，白色文字 + 粗黑描边，左对齐，贴近画面底部。
     返回可以直接接在其他滤镜后面的滤镜片段列表（不含输入/输出标签）。
     """
     if not line_files:
         return []
 
     fs = float(fontsize)
-    line_h = fs * 1.45
-    margin_x = width * 0.08        # 左边距 8%
-    block_bottom = height * 0.92   # 文字块底边位置
-    block_h = len(line_files) * line_h
-    y0 = block_bottom - block_h
+    line_h = fs * 1.62
+    pad_v = fs * 0.72
+    pad_h = fs * 0.95
+
+    max_units = 0.0
+    for line in _read_all(line_files):
+        max_units = max(max_units, line_units(line))
+
+    box_w = min(width * 0.92, max_units * fs + pad_h * 2)
+    box_h = len(line_files) * line_h + pad_v * 2
+    box_x = (width - box_w) / 2
+    box_y = (height - box_h) / 2
+
+    parts = [
+        "drawbox=x=%.1f:y=%.1f:w=%.1f:h=%.1f:color=%s@%.2f:t=fill"
+        % (box_x, box_y, box_w, box_h, bg_color, opacity)
+    ]
 
     fontfile = esc_path(pick_font())
-    parts = []
     for i, tf in enumerate(line_files):
-        y = y0 + i * line_h + (line_h - fs) * 0.5
+        y = box_y + pad_v + i * line_h + (line_h - fs) * 0.42
         parts.append(
             "drawtext=fontfile='%s':textfile='%s':reload=0"
-            ":x=%.1f:y=%.1f"
-            ":fontsize=%d:fontcolor=white"
-            ":borderw=%d:bordercolor=black"
-            % (fontfile, esc_path(tf), margin_x, y, int(fs), max(2, int(round(fs * 0.11))))
+            ":x=(w-text_w)/2:y=%.1f"
+            ":fontsize=%d:fontcolor=white@0.98"
+            ":borderw=%d:bordercolor=black@0.25"
+            % (fontfile, esc_path(tf), y, int(fs), max(1, int(round(fs * 0.045))))
         )
     return parts
 
@@ -304,11 +316,6 @@ def _read_all(paths: list[str]) -> list[str]:
 
 
 # ---------------------------------------------------------------- 右上角标题
-
-# 标题块的位置（占画面宽/高的比例），日期行的定位也依赖这两个值
-TITLE_MARGIN_X = 0.10
-TITLE_MARGIN_Y = 0.12
-TITLE_LINE_H = 1.55
 
 
 def split_title_lines(title: str) -> list[str]:
@@ -339,55 +346,47 @@ def build_corner_filters(
     height: int,
     line_files: list[str],
     fontsize: int,
-    margin_x: float = TITLE_MARGIN_X,
-    margin_y: float = TITLE_MARGIN_Y,
+    opacity: float = 0.45,
+    margin_x: float = 0.1,
+    margin_y: float = 0.12,
+    bg_color: str = "0x000000",
 ) -> list[str]:
     """
-    右上角两行小标题：白色文字 + 粗黑描边（无底板），右对齐。
+    右上角两行小标题：半透明黑底 + 右对齐白字。
     返回可直接接在其他滤镜后面的片段列表。
     """
     if not line_files:
         return []
 
     fs = float(fontsize)
-    line_h = fs * TITLE_LINE_H
+    line_h = fs * 1.55
+    pad_v = fs * 0.42
+    pad_h = fs * 0.55
+
+    max_units = 0.0
+    for line in _read_all(line_files):
+        max_units = max(max_units, line_units(line))
+
+    box_w = max_units * fs + pad_h * 2
+    box_h = len(line_files) * line_h + pad_v * 2
     mx = width * margin_x
     my = height * margin_y
+    box_x = width - box_w - mx
+    box_y = my
+
+    parts = [
+        "drawbox=x=%.1f:y=%.1f:w=%.1f:h=%.1f:color=%s@%.2f:t=fill"
+        % (box_x, box_y, box_w, box_h, bg_color, opacity)
+    ]
 
     fontfile = esc_path(pick_font())
-    parts = []
     for i, tf in enumerate(line_files):
-        y = my + i * line_h
+        y = box_y + pad_v + i * line_h + (line_h - fs) * 0.35
         parts.append(
             "drawtext=fontfile='%s':textfile='%s':reload=0"
             ":x=w-text_w-%.1f:y=%.1f"
-            ":fontsize=%d:fontcolor=white"
-            ":borderw=%d:bordercolor=black"
-            % (fontfile, esc_path(tf), mx, y, int(fs), max(2, int(round(fs * 0.12))))
+            ":fontsize=%d:fontcolor=white@0.98"
+            ":borderw=%d:bordercolor=black@0.30"
+            % (fontfile, esc_path(tf), mx + pad_h, y, int(fs), max(1, int(round(fs * 0.05))))
         )
     return parts
-
-
-def title_block_bottom(height: int, n_lines: int, fontsize: int) -> float:
-    """标题块底边的 y 坐标（日期行紧贴在它下方）。"""
-    return height * TITLE_MARGIN_Y + n_lines * fontsize * TITLE_LINE_H
-
-
-def build_date_filter(
-    width: int,
-    height: int,
-    text_file: str,
-    fontsize: int,
-    y: float,
-) -> list[str]:
-    """
-    发布日期行：金色粗体 + 黑描边（无底板），水平居中，显示在标题块下方。
-    """
-    fontfile = esc_path(pick_font())
-    return [
-        "drawtext=fontfile='%s':textfile='%s':reload=0"
-        ":x=(w-text_w)/2:y=%.1f"
-        ":fontsize=%d:fontcolor=0xFFD700"
-        ":borderw=%d:bordercolor=black"
-        % (fontfile, esc_path(text_file), y, int(fontsize), max(2, int(round(fontsize * 0.11))))
-    ]

@@ -228,8 +228,12 @@
               <div class="seg" data-v="large">大</div>
             </div>
           </div>
+          <div class="field">
+            <label>底板深浅 <span class="rangeval" id="opVal">55%</span></label>
+            <input type="range" id="opacity" min="15" max="85" value="55" step="5" />
+          </div>
         </div>
-        <p class="hint">正文沉底左对齐、白字黑描边自动换行；右上角标题右对齐、发布日期金色居中，均无底板，随画面尺寸自适应缩放。</p>
+        <p class="hint">文字为白色、自动换行并水平垂直居中，底板为半透明灰色，随画面尺寸自适应缩放。</p>
       </div>
 
       <div class="card">
@@ -454,6 +458,8 @@ el.text.addEventListener('keydown', e=>{
 });
 el.rate.addEventListener('input', ()=> el.rateVal.textContent = el.rate.value+'%' );
 el.vol.addEventListener('input', ()=> el.volVal.textContent = el.vol.value+'%' );
+const opSlider = $('#opacity');
+opSlider.addEventListener('input', ()=> $('#opVal').textContent = opSlider.value+'%' );
 document.querySelectorAll('.segs').forEach(g=>{
   g.addEventListener('click', e=>{
     const seg = e.target.closest('.seg');
@@ -478,6 +484,7 @@ function payload(){
     resolution: opt.resolution,
     caption: opt.caption === 'yes',
     caption_size: opt.captionSize,
+    caption_opacity: parseInt(opSlider.value,10)/100,
     title: opt.title === 'yes',
     engine: engineId
   };
