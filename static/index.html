@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>文本转语音 · 视频合成</title>
+<style>
+  :root{
+    --bg:#f5f7fa;
+    --panel:#ffffff;
+    --border:#e3e8ef;
+    --text:#1f2733;
+    --muted:#6b7684;
+    --primary:#2563eb;
+    --primary-dark:#1d4ed8;
+    --primary-soft:#eef4ff;
+    --fog:#0ea5e9;
+    --fog-soft:#e6f6fe;
+    --thunder:#6366f1;
+    --thunder-soft:#eef0ff;
+    --danger:#dc2626;
+    --success:#059669;
+    --radius:14px;
+    --shadow:0 1px 2px rgba(16,24,40,.04), 0 8px 24px rgba(16,24,40,.06);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    font-family:"Microsoft YaHei","PingFang SC","Segoe UI",system-ui,sans-serif;
+    background:var(--bg);color:var(--text);line-height:1.6;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1180px;margin:0 auto;padding:24px 20px 60px}
+
+  header{display:flex;align-items:center;gap:14px;margin-bottom:22px}
+  .logo{
+    width:42px;height:42px;border-radius:12px;flex:none;
+    background:linear-gradient(135deg,#2563eb,#6366f1);
+    display:flex;align-items:center;justify-content:center;
+  }
+  header h1{font-size:20px;font-weight:600;letter-spacing:.3px}
+  header p{font-size:13px;color:var(--muted)}
+
+  .rules{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px;margin-bottom:10px}
+  .rule{
+    background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);
+    padding:14px 16px;display:flex;align-items:center;gap:12px;transition:.25s;
+    box-shadow:var(--shadow);
+  }
+  .rule .kw{font-size:17px;font-weight:700;letter-spacing:1px;color:var(--kw)}
+  .rule .desc{font-size:12px;color:var(--muted)}
+  .rule .alias{font-size:11px;color:var(--muted);margin-top:2px}
+  .rule.miss{opacity:.55}
+  .rule.hit{border-color:var(--kw);transform:translateY(-2px);background:var(--kwbg);
+    box-shadow:0 6px 18px rgba(16,24,40,.1)}
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--kw);opacity:.35;flex:none}
+  .rule.hit .dot{opacity:1;box-shadow:0 0 0 4px rgba(0,0,0,.05)}
+  .rule .meta{margin-left:auto;text-align:right;font-size:11px;color:var(--muted);line-height:1.4}
+  .ruletools{display:flex;align-items:center;gap:8px;margin-bottom:18px;flex-wrap:wrap}
+  .ruletools .path{font-size:11.5px;color:var(--muted);font-family:Consolas,monospace;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:52%}
+  .ruletools button{font-size:12px;padding:6px 12px;border-radius:8px}
+
+  .grid{display:grid;grid-template-columns:1.15fr .85fr;gap:18px;align-items:start}
+  .card{
+    background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);
+    padding:18px;box-shadow:var(--shadow);margin-bottom:18px;
+  }
+  .card h2{font-size:14px;font-weight:600;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+  .card h2 .tag{font-size:11px;font-weight:400;color:var(--muted)}
+
+  textarea{
+    width:100%;min-height:150px;resize:vertical;border:1px solid var(--border);
+    border-radius:10px;padding:14px;font-size:15px;font-family:inherit;line-height:1.7;
+    color:var(--text);background:#fcfdfe;transition:.2s;
+  }
+  textarea:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px rgba(37,99,235,.1);background:#fff}
+  textarea::placeholder{color:#a8b1bd}
+
+  .row{display:flex;align-items:center;gap:10px;margin-top:12px}
+  .counter{font-size:12px;color:var(--muted);margin-left:auto}
+
+  .field{margin-top:14px}
+  .field label{display:block;font-size:12.5px;color:var(--muted);margin-bottom:6px}
+  select,input[type=range]{
+    width:100%;
+  }
+  select{
+    border:1px solid var(--border);border-radius:9px;padding:9px 10px;font-size:14px;
+    background:#fff;color:var(--text);font-family:inherit;cursor:pointer;
+  }
+  select:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px rgba(37,99,235,.1)}
+  input[type=range]{accent-color:var(--primary);cursor:pointer}
+  .rangeval{float:right;font-weight:600;color:var(--text);font-size:12.5px}
+
+  .segs{display:flex;gap:6px;margin-top:8px}
+  .seg{
+    flex:1;text-align:center;font-size:12.5px;padding:7px 4px;border:1px solid var(--border);
+    border-radius:8px;cursor:pointer;color:var(--muted);background:#fff;transition:.18s;
+  }
+  .seg:hover{border-color:#c7d0dd}
+  .seg.on{background:var(--primary-soft);border-color:var(--primary);color:var(--primary-dark);font-weight:600}
+
+  .actions{display:flex;gap:10px;margin-top:18px;flex-wrap:wrap}
+  button{
+    font-family:inherit;font-size:14px;border-radius:10px;padding:11px 18px;cursor:pointer;
+    border:1px solid var(--border);background:#fff;color:var(--text);transition:.18s;
+  }
+  button:hover:not(:disabled){border-color:#c7d0dd;background:#fafbfc}
+  button:disabled{opacity:.5;cursor:not-allowed}
+  .btn-primary{
+    background:var(--primary);color:#fff;border-color:var(--primary);font-weight:600;flex:1;min-width:150px;
+  }
+  .btn-primary:hover:not(:disabled){background:var(--primary-dark);border-color:var(--primary-dark)}
+
+  .progress{margin-top:16px;display:none}
+  .bar{height:8px;border-radius:99px;background:#e9edf3;overflow:hidden}
+  .bar>i{display:block;height:100%;width:0;border-radius:99px;background:linear-gradient(90deg,#2563eb,#6366f1);transition:width .35s}
+  .ptext{display:flex;justify-content:space-between;font-size:12.5px;color:var(--muted);margin-top:7px}
+
+  .alert{margin-top:14px;padding:11px 14px;border-radius:10px;font-size:13px;display:none;white-space:pre-line}
+  .alert.err{background:#fef2f2;color:var(--danger);border:1px solid #fecaca}
+  .alert.ok{background:#ecfdf5;color:var(--success);border:1px solid #a7f3d0}
+
+  .result{border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:14px;background:#fcfdfe}
+  .result:last-child{margin-bottom:0}
+  .rhead{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+  .badge{font-size:12px;padding:3px 9px;border-radius:99px;font-weight:600}
+  .badge.fog{background:var(--fog-soft);color:#0369a1}
+  .badge.thunder{background:var(--thunder-soft);color:#4338ca}
+  .rhead .strat{font-size:11.5px;color:var(--muted);margin-left:auto;text-align:right}
+  video{width:100%;border-radius:9px;background:#000;max-height:340px}
+  .rinfo{display:flex;flex-wrap:wrap;gap:12px;font-size:11.5px;color:var(--muted);margin-top:9px}
+  .rinfo b{color:var(--text);font-weight:600}
+  .links{display:flex;gap:8px;margin-top:11px}
+  .links a,.links button{
+    font-size:12.5px;padding:7px 12px;text-decoration:none;border:1px solid var(--border);
+    border-radius:8px;color:var(--text);background:#fff;cursor:pointer;
+  }
+  .links a.dl{background:var(--primary-soft);border-color:#c7dbff;color:var(--primary-dark);font-weight:600}
+
+  .empty{color:var(--muted);font-size:13px;text-align:center;padding:26px 10px;border:1px dashed var(--border);border-radius:10px}
+  .hist{font-size:13px}
+  .hist li{list-style:none;display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #f0f3f7}
+  .hist li:last-child{border-bottom:none}
+  .hist a{color:var(--primary);text-decoration:none;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .hist a:hover{text-decoration:underline}
+  .hist span{font-size:11.5px;color:var(--muted);flex:none}
+
+  .hint{font-size:12px;color:var(--muted);margin-top:10px;line-height:1.7}
+  .kbd{background:#f1f4f8;border:1px solid var(--border);border-radius:5px;padding:1px 6px;font-size:11.5px;font-family:Consolas,monospace}
+
+  @media(max-width:900px){
+    .grid{grid-template-columns:1fr}
+    .rules{grid-template-columns:1fr}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="logo">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/>
+      </svg>
+    </div>
+    <div>
+      <h1>文本转语音 · 视频合成</h1>
+      <p>输入文本自动配音，并按关键词插入对应视频</p>
+    </div>
+  </header>
+
+  <div class="rules" id="rules"></div>
+  <div class="ruletools">
+    <span class="path" id="rulesPath"></span>
+    <button id="btnReload">重载规则</button>
+    <button id="btnEditRules">打开配置文件</button>
+    <span class="path" id="rulesHint" style="border:none"></span>
+  </div>
+
+  <div class="grid">
+    <div>
+      <div class="card">
+        <h2>播报文本 <span class="tag" id="hitTag">未检测到关键词</span></h2>
+        <textarea id="text" placeholder="例如：发布大雾橙色预警，今天夜间到明天上午能见度不足两百米，请注意行车安全。&#10;&#10;包含「大雾」→ 使用视频一；包含「雷电」→ 使用视频二；两者都包含 → 同时生成两个版本。"></textarea>
+        <div class="row">
+          <button id="btnPreview" disabled>试听语音</button>
+          <span id="audioStat" style="font-size:12.5px;color:var(--muted)"></span>
+          <span class="counter"><span id="len">0</span> 字</span>
+        </div>
+        <audio id="player" style="display:none"></audio>
+      </div>
+
+      <div class="card">
+        <h2>配音设置</h2>
+        <div class="field">
+          <label>语音引擎 <span class="tag" id="engineNote" style="float:right"></span></label>
+          <select id="engine"></select>
+        </div>
+        <div class="field">
+          <label>发音人</label>
+          <select id="voice"></select>
+        </div>
+        <div class="field">
+          <label>语速 <span class="rangeval" id="rateVal">0%</span></label>
+          <input type="range" id="rate" min="-50" max="100" value="0" step="5" />
+        </div>
+        <div class="field">
+          <label>音量 <span class="rangeval" id="volVal">0%</span></label>
+          <input type="range" id="vol" min="-50" max="50" value="0" step="5" />
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>画面文字 <span class="tag">叠加在视频正中</span></h2>
+        <div class="field">
+          <label>是否叠加</label>
+          <div class="segs" data-group="caption">
+            <div class="seg on" data-v="yes">显示文字</div>
+            <div class="seg" data-v="no">不显示</div>
+          </div>
+        </div>
+        <div id="captionOpts">
+          <div class="field">
+            <label>字号</label>
+            <div class="segs" data-group="captionSize">
+              <div class="seg" data-v="small">小</div>
+              <div class="seg on" data-v="medium">标准</div>
+              <div class="seg" data-v="large">大</div>
+            </div>
+          </div>
+          <div class="field">
+            <label>底板深浅 <span class="rangeval" id="opVal">55%</span></label>
+            <input type="range" id="opacity" min="15" max="85" value="55" step="5" />
+          </div>
+        </div>
+        <p class="hint">文字为白色、自动换行并水平垂直居中，底板为半透明灰色，随画面尺寸自适应缩放。</p>
+      </div>
+
+      <div class="card">
+        <h2>音画对齐</h2>
+        <div class="field">
+          <label>语音比视频长时</label>
+          <div class="segs" data-group="overflow">
+            <div class="seg on" data-v="loop">循环画面（快）</div>
+            <div class="seg" data-v="freeze">定格最后一帧</div>
+          </div>
+        </div>
+        <div class="field">
+          <label>语音比视频短时</label>
+          <div class="segs" data-group="underflow">
+            <div class="seg on" data-v="pad">保留完整画面 + 尾部静音</div>
+            <div class="seg" data-v="trim">画面裁到语音长度</div>
+          </div>
+        </div>
+        <div class="field">
+          <label>输出清晰度</label>
+          <div class="segs" data-group="resolution">
+            <div class="seg on" data-v="source">原始（极速）</div>
+            <div class="seg" data-v="1080">1080P</div>
+            <div class="seg" data-v="720">720P</div>
+          </div>
+        </div>
+        <div class="actions">
+          <button class="btn-primary" id="btnGen" disabled>生成视频</button>
+          <button id="btnFolder">打开输出目录</button>
+        </div>
+        <div class="progress" id="prog">
+          <div class="bar"><i id="progBar"></i></div>
+          <div class="ptext"><span id="progMsg">准备中</span><span id="progPct">0%</span></div>
+        </div>
+        <div class="alert" id="alert"></div>
+        <p class="hint">
+          快捷键 <span class="kbd">Ctrl</span> + <span class="kbd">Enter</span> 快速生成。
+          输出的视频保存在 <span class="kbd">outputs</span> 目录。
+        </p>
+      </div>
+    </div>
+
+    <div>
+      <div class="card">
+        <h2>生成结果</h2>
+        <div id="results"><div class="empty">还没有成片，输入文本后点击「生成视频」</div></div>
+      </div>
+      <div class="card">
+        <h2>历史文件 <span class="tag">最近 10 个</span></h2>
+        <ul class="hist" id="hist"><li><span style="color:var(--muted)">暂无</span></li></ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const el = {
+  rules:$('#rules'), text:$('#text'), len:$('#len'), hitTag:$('#hitTag'),
+  voice:$('#voice'), rate:$('#rate'), rateVal:$('#rateVal'), vol:$('#vol'), volVal:$('#volVal'),
+  btnGen:$('#btnGen'), btnPreview:$('#btnPreview'), btnFolder:$('#btnFolder'),
+  player:$('#player'), audioStat:$('#audioStat'),
+  prog:$('#prog'), progBar:$('#progBar'), progMsg:$('#progMsg'), progPct:$('#progPct'),
+  alert:$('#alert'), results:$('#results'), hist:$('#hist'),
+  rulesPath:$('#rulesPath'), rulesHint:$('#rulesHint'),
+  engine:$('#engine'), engineNote:$('#engineNote')
+};
+const opt = { overflow:'loop', underflow:'pad', resolution:'source', caption:'yes', captionSize:'medium' };
+let rulesCache = [];
+let signalsCache = [];
+let engineId = 'edge';
+
+/* 关键词卡片的配色，按规则顺序循环取用 */
+const PALETTE = [
+  ['#0ea5e9','#e6f6fe'], ['#6366f1','#eef0ff'], ['#f59e0b','#fff7e6'],
+  ['#10b981','#e8faf3'], ['#ef4444','#fef2f2'], ['#8b5cf6','#f5f0ff'],
+  ['#0891b2','#e4f7fb'], ['#d97706','#fdf6e3']
+];
+const tone = i => PALETTE[(i < 0 ? 0 : i) % PALETTE.length];
+
+function showAlert(msg, type){
+  el.alert.textContent = msg;
+  el.alert.className = 'alert ' + (type||'err');
+  el.alert.style.display = 'block';
+}
+function hideAlert(){ el.alert.style.display = 'none'; }
+
+/* ---------- 规则 / 配置 ---------- */
+async function loadConfig(){
+  try{
+    const r = await fetch('/api/config').then(x=>x.json());
+    rulesCache = r.rules;
+    signalsCache = r.signals || [];
+    if(r.rules_file) el.rulesPath.textContent = r.rules_file;
+    if(!r.rules.length){
+      el.rules.innerHTML = '<div class="empty">还没有配置任何关键词，请在 rules.json 里添加</div>';
+    }else{
+      el.rules.innerHTML = r.rules.map((x,i)=>{
+        const [c,bg] = tone(i);
+        const meta = x.exists
+          ? `${x.info ? x.info.width+'×'+x.info.height+'<br>'+x.info.duration+' 秒' : ''}`
+          : '视频缺失';
+        const alias = (x.keywords || []).slice(1);
+        return `<div class="rule miss" data-idx="${i}" style="--kw:${c};--kwbg:${bg}">
+          <span class="dot"></span>
+          <div style="min-width:0">
+            <div class="kw">${x.keyword}</div>
+            <div class="desc">${x.exists ? x.label : '未找到源文件'}</div>
+            ${alias.length ? `<div class="alias">同义：${alias.join(' / ')}</div>` : ''}
+          </div>
+          <div class="meta">${meta}</div>
+        </div>`;
+      }).join('');
+    }
+    syncHit();
+  }catch(e){ /* ignore */ }
+}
+
+/* 返回命中的规则下标 */
+function matches(){
+  const t = el.text.value;
+  const out = [];
+  rulesCache.forEach((r,i)=>{
+    if(r.exists && (r.keywords || [r.keyword]).some(k => k && t.includes(k))) out.push(i);
+  });
+  return out;
+}
+
+function syncHit(){
+  const hitIdx = matches();
+  document.querySelectorAll('.rule').forEach(node=>{
+    const on = hitIdx.includes(parseInt(node.dataset.idx, 10));
+    node.classList.toggle('hit', on);
+    node.classList.toggle('miss', !on);
+  });
+  const names = hitIdx.map(i=>rulesCache[i].keyword);
+  const sigHits = (signalsCache||[]).filter(s =>
+    (s.keywords || [s.keyword]).some(k => k && el.text.value.includes(k)));
+  if(names.length){
+    el.hitTag.textContent = '命中：' + names.join(' / ')
+      + (sigHits.length ? ' · 预警图标：' + sigHits.map(s=>s.label || s.keyword).join('、') : '');
+    el.hitTag.style.color = 'var(--success)';
+  }else{
+    const total = rulesCache.filter(r=>r.exists).length;
+    el.hitTag.textContent = total ? '未检测到关键词' : '尚未配置可用视频';
+    el.hitTag.style.color = '';
+  }
+  const enabled = names.length > 0 && el.text.value.trim().length > 0;
+  el.btnGen.disabled = !enabled;
+  el.btnPreview.disabled = !el.text.value.trim();
+}
+
+$('#btnReload').addEventListener('click', async ()=>{
+  hideAlert();
+  try{
+    const d = await fetch('/api/reload-rules', {method:'POST'}).then(x=>x.json());
+    await loadConfig();
+    await loadEngines();
+    showAlert(`已重新读取 rules.json，共 ${d.count} 条规则。`, 'ok');
+  }catch(e){
+    showAlert('重载失败，请检查 rules.json 格式');
+  }
+});
+$('#btnEditRules').addEventListener('click', ()=> fetch('/api/open-file?which=rules', {method:'POST'}));
+
+/* ---------- 语音引擎 ---------- */
+async function loadEngines(){
+  try{
+    const d = await fetch('/api/tts-engines').then(x=>x.json());
+    engineId = d.current || 'edge';
+    el.engine.innerHTML = d.engines.map(e=>
+      `<option value="${e.id}">${e.label}${e.ready ? '' : '（未配置）'}</option>`
+    ).join('');
+    el.engine.value = engineId;
+    syncEngineNote(d.engines);
+    await loadVoices(engineId);
+  }catch(e){ await loadVoices(); }
+}
+
+function syncEngineNote(engines){
+  const cur = (engines||[]).find(e => e.id === el.engine.value);
+  if(!cur){ el.engineNote.textContent = ''; return; }
+  el.engineNote.textContent = cur.ready ? cur.note : '不可用：' + cur.reason;
+  el.engineNote.style.color = cur.ready ? '' : 'var(--danger, #c0392b)';
+}
+
+el.engine.addEventListener('change', async ()=>{
+  engineId = el.engine.value;
+  const d = await fetch('/api/tts-engines').then(x=>x.json());
+  syncEngineNote(d.engines);
+  await loadVoices(engineId);
+});
+
+/* ---------- 语音列表 ---------- */
+async function loadVoices(engine){
+  try{
+    const q = engine ? ('?engine=' + encodeURIComponent(engine)) : '';
+    const d = await fetch('/api/voices' + q).then(x=>x.json());
+    el.voice.innerHTML = d.voices.map(v=>`<option value="${v.id}">${v.name}</option>`).join('');
+  }catch(e){ el.voice.innerHTML = '<option value="">音色加载失败</option>'; }
+}
+
+/* ---------- 参数 ---------- */
+el.text.addEventListener('input', ()=>{
+  el.len.textContent = el.text.value.trim().length;
+  syncHit();
+});
+el.text.addEventListener('keydown', e=>{
+  if((e.ctrlKey||e.metaKey) && e.key==='Enter'){ e.preventDefault(); generate(); }
+});
+el.rate.addEventListener('input', ()=> el.rateVal.textContent = el.rate.value+'%' );
+el.vol.addEventListener('input', ()=> el.volVal.textContent = el.vol.value+'%' );
+const opSlider = $('#opacity');
+opSlider.addEventListener('input', ()=> $('#opVal').textContent = opSlider.value+'%' );
+document.querySelectorAll('.segs').forEach(g=>{
+  g.addEventListener('click', e=>{
+    const seg = e.target.closest('.seg');
+    if(!seg) return;
+    g.querySelectorAll('.seg').forEach(s=>s.classList.remove('on'));
+    seg.classList.add('on');
+    opt[g.dataset.group] = seg.dataset.v;
+    if(g.dataset.group === 'caption'){
+      $('#captionOpts').style.display = seg.dataset.v === 'yes' ? '' : 'none';
+    }
+  });
+});
+
+function payload(){
+  return {
+    text: el.text.value.trim(),
+    voice: el.voice.value,
+    rate: parseInt(el.rate.value,10),
+    volume: parseInt(el.vol.value,10),
+    overflow: opt.overflow,
+    underflow: opt.underflow,
+    resolution: opt.resolution,
+    caption: opt.caption === 'yes',
+    caption_size: opt.captionSize,
+    caption_opacity: parseInt(opSlider.value,10)/100,
+    engine: engineId
+  };
+}
+
+/* ---------- 试听 ---------- */
+el.btnPreview.addEventListener('click', async ()=>{
+  hideAlert();
+  el.btnPreview.disabled = true;
+  el.audioStat.textContent = '正在合成语音…';
+  try{
+    const res = await fetch('/api/preview-audio',{
+      method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload())
+    });
+    if(!res.ok){
+      const t = await res.text();
+      throw new Error(t.replace(/^"|"$/g,''));
+    }
+    const blob = await res.blob();
+    el.player.src = URL.createObjectURL(blob);
+    el.player.style.display = 'block';
+    el.player.play();
+    el.audioStat.textContent = '试听中';
+  }catch(e){
+    showAlert('试听失败：' + e.message);
+    el.audioStat.textContent = '';
+  }finally{
+    el.btnPreview.disabled = false;
+  }
+});
+el.player.addEventListener('ended', ()=> el.audioStat.textContent = '');
+
+/* ---------- 生成 ---------- */
+el.btnGen.addEventListener('click', generate);
+
+async function generate(){
+  hideAlert();
+  el.btnGen.disabled = true;
+  el.prog.style.display = 'block';
+  el.progBar.style.width = '0%';
+  el.progMsg.textContent = '提交任务';
+  el.progPct.textContent = '0%';
+  try{
+    const res = await fetch('/api/generate',{
+      method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload())
+    });
+    if(!res.ok){
+      const t = await res.text();
+      throw new Error(t.replace(/^"|"$/g,''));
+    }
+    const { job_id } = await res.json();
+    await poll(job_id);
+  }catch(e){
+    showAlert(e.message || '生成失败');
+  }finally{
+    el.btnGen.disabled = false;
+  }
+}
+
+function poll(id){
+  return new Promise((resolve,reject)=>{
+    const timer = setInterval(async ()=>{
+      try{
+        const j = await fetch('/api/job/'+id).then(x=>x.json());
+        el.progBar.style.width = j.progress + '%';
+        el.progPct.textContent = j.progress + '%';
+        el.progMsg.textContent = j.message;
+        if(j.status === 'done'){
+          clearInterval(timer);
+          renderResults(j.results);
+          loadHistory();
+          showAlert('生成完成', 'ok');
+          resolve();
+        }else if(j.status === 'error'){
+          clearInterval(timer);
+          showAlert(j.message);
+          resolve();
+        }
+      }catch(e){ clearInterval(timer); reject(e); }
+    }, 800);
+  });
+}
+
+function renderResults(list){
+  if(!list || !list.length) return;
+  el.results.innerHTML = list.map(r=>{
+    const idx = rulesCache.findIndex(x => (x.keywords || [x.keyword]).includes(r.keyword));
+    const [c,bg] = tone(idx);
+    return `<div class="result">
+      <div class="rhead">
+        <span class="badge" style="background:${bg};color:${c}">${r.keyword}</span>
+        <b style="font-size:13.5px">${r.label}</b>
+        <span class="strat">${r.strategy}</span>
+      </div>
+      <video src="${r.url}" controls playsinline preload="metadata"></video>
+      <div class="rinfo">
+        <span>成片 <b>${r.output_duration}s</b></span>
+        <span>画面 <b>${r.width}×${r.height}</b></span>
+        <span>语音 <b>${r.audio_duration}s</b></span>
+        <span>视频原长 <b>${r.video_duration}s</b></span>
+        <span>大小 <b>${r.size_mb} MB</b></span>
+        ${r.caption ? `<span>画面文字 <b>${r.lines} 行</b></span>` : ''}
+        ${r.signal ? `<span>预警图标 <b>${r.signal}</b></span>` : ''}
+      </div>
+      <div class="links">
+        <a class="dl" href="${r.url}" download="${r.file}">下载视频</a>
+        <a href="${r.url}" target="_blank">新窗口打开</a>
+        <button onclick="navigator.clipboard.writeText(location.origin+'${r.url}');this.textContent='已复制 ✓'">复制链接</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+/* ---------- 历史 ---------- */
+async function loadHistory(){
+  try{
+    const d = await fetch('/api/list').then(x=>x.json());
+    if(!d.items.length){ el.hist.innerHTML = '<li><span style="color:var(--muted)">暂无</span></li>'; return; }
+    el.hist.innerHTML = d.items.slice(0,10).map(f=>{
+      const dt = new Date(f.modified*1000).toLocaleString('zh-CN',{hour12:false}).slice(5);
+      return `<li><a href="${f.url}" target="_blank">${f.file}</a><span>${f.size_mb} MB · ${dt}</span></li>`;
+    }).join('');
+  }catch(e){ /* ignore */ }
+}
+
+el.btnFolder.addEventListener('click', ()=> fetch('/api/open-folder',{method:'POST'}));
+
+(async function init(){
+  await loadEngines();
+  await loadConfig();
+  loadHistory();
+})();
+</script>
+</body>
+</html>

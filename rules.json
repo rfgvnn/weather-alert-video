@@ -1,0 +1,128 @@
+{
+  "_说明": [
+    "关键词 → 视频 的路由表。用记事本改完保存，回到网页点一下“重载规则”就生效，不需要重启服务。",
+    "",
+    "keywords ：命中其中任意一个词，就把语音合成到这条规则对应的视频。可写多个同义词，如 [\"大风\",\"阵风\"]。",
+    "video    ：视频文件路径。可以写完整路径，也可以相对 app 目录写，例如 videos/大风.mp4。",
+    "label    ：网页上显示的名字，可省略。",
+    "tag      ：输出文件名里的标记，可省略。",
+    "",
+    "要新增一个关键词（例如“暴雨”），把下面某一条复制一份，改 keywords / video / label 三处即可。",
+    "视频建议放在 app 目录下的 videos 文件夹里，然后在 video 里写 videos/文件名.mp4。",
+    "",
+    "signals：预警图标表。文本包含图标关键词时，把对应 GIF/PNG 叠加到成片左上角。",
+    "icon ：图标文件路径，可写绝对路径或相对 app 目录，例如 signals/FOGW_O.gif。",
+    "归属自动判断：图标关键词里包含哪个视频的关键词（如“大雾橙色”包含“大雾”），就贴到哪个视频的成片上；",
+    "  也可以用 attach 手动指定，如 { \"keywords\":[\"大风蓝色\"], \"icon\":\"signals/GALE_B.gif\", \"attach\":\"大风\" }。",
+    "size     ：图标宽度占画面宽度的比例，可省略（默认 0.33，即 33%，范围 0.05~0.5）。",
+    "margin_x ：距左边缘的距离，占画面宽度的比例，可省略（默认 0.05，即 5%）。",
+    "margin_y ：距上边缘的距离，占画面高度的比例，可省略（默认 0.08，即 8%）。",
+    "margin   ：简写，只写一个数就同时设定距左、距上，例如 \"margin\": 0.06。"
+  ],
+  "rules": [
+    {
+      "keywords": [
+        "大雾"
+      ],
+      "video": "videos/大雾.mp4",
+      "label": "大雾",
+      "tag": "大雾"
+    },
+    {
+      "keywords": [
+        "雷电"
+      ],
+      "video": "videos/雷电.mp4",
+      "label": "雷电",
+      "tag": "雷电"
+    },
+    {
+      "keywords": [
+        "大风"
+      ],
+      "video": "videos/大风.mp4",
+      "label": "大风",
+      "tag": "大风"
+    },
+    {
+      "keywords": [
+        "暴雨"
+      ],
+      "video": "videos/暴雨.mp4",
+      "label": "暴雨",
+      "tag": "暴雨"
+    },
+    {
+      "keywords": [
+        "雷暴大风"
+      ],
+      "video": "videos/雷暴大风.mp4",
+      "label": "雷暴大风",
+      "tag": "雷暴大风"
+    },
+    {
+      "keywords": [
+        "高温"
+      ],
+      "video": "videos/高温.mp4",
+      "label": "高温",
+      "tag": "高温"
+    },
+    {
+      "keywords": [
+        "暴雪"
+      ],
+      "video": "videos/暴雪.mp4",
+      "label": "暴雪",
+      "tag": "暴雪"
+    },
+        {
+      "keywords": [
+        "寒潮"
+      ],
+      "video": "videos/寒潮.mp4",
+      "label": "寒潮",
+      "tag": "寒潮"
+    },
+    {
+      "keywords": [
+        "冰雹"
+      ],
+      "video": "videos/冰雹.mp4",
+      "label": "冰雹",
+      "tag": "冰雹"
+    }
+  ],
+  "signals": [
+    {
+      "keywords": [
+        "大雾黄色"
+      ],
+      "icon": "signals/FOGW_Y.gif",
+      "label": "大雾黄色预警",
+      "size": 0.33,
+      "margin_x": 0.05,
+      "margin_y": 0.08
+    },
+    {
+      "keywords": [
+        "大雾橙色"
+      ],
+      "icon": "signals/FOGW_O.gif",
+      "label": "大雾橙色预警",
+      "size": 0.33,
+      "margin_x": 0.05,
+      "margin_y": 0.08
+    },
+    {
+      "keywords": [
+        "大风蓝色"
+      ],
+      "icon": "signals/GALE_B.gif",
+      "label": "大风蓝色预警",
+      "size": 0.33,
+      "margin_x": 0.05,
+      "margin_y": 0.08
+    }
+  ]
+}

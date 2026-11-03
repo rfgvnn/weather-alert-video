@@ -1,0 +1,9 @@
+# 依赖清单（Linux / macOS / Windows 通用）
+# 安装： pip install -r requirements.txt
+#
+# 必装
+edge-tts>=6.1.9            # Edge 引擎：微软在线语音合成，无需 API Key
+imageio-ffmpeg>=0.4.9      # 自带 ffmpeg 二进制（若系统已装 ffmpeg 也可以）
+fastapi>=0.110             # Web 服务
+uvicorn>=0.27              # ASGI 服务器
+python-multipart>=0.0.9    # 表单支持
