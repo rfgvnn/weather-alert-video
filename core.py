@@ -480,6 +480,41 @@ class SignalStyle:
 
 SIZE_SCALE = {"small": 0.82, "medium": 1.0, "large": 1.25}
 
+# 右上角标题：从文本开头提取「XX气象台…发布XX预警信号」
+_ORG_RE = re.compile(
+    r"^\s*([\u4e00-\u9fa5A-Za-z]{2,16}?(?:气象台|气象局|气象中心))"
+)
+_SIGNAL_RE = re.compile(r"([\u4e00-\u9fa5]{2,12}?(?:预警信号|预警))")
+
+
+def extract_alert_title(text: str) -> str:
+    """
+    从文本开头提取「单位 + 发布 + 预警名称」，例如：
+
+        磁县气象台2026年10月31日17时39分发布大风蓝色预警信号：预计…
+        -> 磁县气象台发布大风蓝色预警信号
+
+    提取不到（不是气象台发布的预警、或没有「发布XX预警信号」）时返回空串。
+    """
+    s = (text or "").strip()
+    if not s:
+        return ""
+
+    m = _ORG_RE.match(s)
+    if not m:
+        return ""
+    org = m.group(1)
+
+    # 只在开头一小段里找「发布」，避免匹配到正文中间的「发布」
+    head = s[m.end():][:60]
+    i = head.find("发布")
+    if i < 0:
+        return ""
+    m2 = _SIGNAL_RE.match(head[i + 2:])
+    if not m2:
+        return ""
+    return f"{org}发布{m2.group(1)}"
+
 
 def target_size(info: VideoInfo, opts: RenderOptions) -> tuple[int, int]:
     th = {"source": 0, "1080": 1080, "720": 720}.get(opts.resolution, 0)
@@ -504,10 +539,12 @@ def build_video(
     opts: RenderOptions,
     style: TextStyle | None = None,
     signal: SignalStyle | None = None,
+    corner_text: str = "",
+    workdir: str | None = None,
 ) -> dict[str, Any]:
     """
     把语音作为音轨合成进视频，处理长度对齐，
-    并可选在画面中央叠加文字、左上角叠加预警图标。
+    并可选在画面中央叠加文字、左上角叠加预警图标、右上角叠加标题。
     返回本次渲染的描述信息（供结果展示）。
     """
     style = style or TextStyle(enabled=False)
@@ -548,6 +585,17 @@ def build_video(
         line_files = caption.write_line_files(lines, os.path.join(workdir, "lines"))
         n_lines = len(line_files)
         vf += caption.build_caption_filters(out_w, out_h, line_files, fs, style.opacity)
+
+    # ---- 右上角标题：XX气象台发布XX预警信号（分两行、右对齐）----
+    t_lines = 0
+    t_fs = 0
+    if (corner_text or "").strip():
+        t_fs = max(14, int(round(out_w / 40)))
+        lines_top = caption.split_title_lines(corner_text)
+        wd = workdir or style.workdir or tempfile.mkdtemp(prefix="ttslines_")
+        t_files = caption.write_line_files(lines_top, os.path.join(wd, "title"))
+        t_lines = len(t_files)
+        vf += caption.build_corner_filters(out_w, out_h, t_files, t_fs)
 
     # ---- 左上角预警图标 ----
     icon = signal if (signal and signal.path and os.path.exists(signal.path)) else None
@@ -610,7 +658,14 @@ def build_video(
     cmd += ["-movflags", "+faststart", out_path]
 
     _run(cmd, "音画合成（含画面文字/图标）" if reencode else "音画合成")
-    return {"caption": bool(n_lines), "lines": n_lines, "fontsize": fs, "signal": bool(icon)}
+    return {
+        "caption": bool(n_lines),
+        "lines": n_lines,
+        "fontsize": fs,
+        "signal": bool(icon),
+        "title_lines": t_lines,
+        "title_fontsize": t_fs,
+    }
 
 
 # ---------------------------------------------------------------- 主流程
@@ -635,6 +690,7 @@ class Result:
     caption: bool = False
     lines: int = 0
     signal: str = ""
+    title: str = ""
 
 
 def match_rules(text: str) -> list[dict[str, Any]]:
@@ -706,6 +762,7 @@ def generate(
     caption_opacity: float = 0.55,
     signal_enabled: bool = True,
     signal_size: float | None = None,
+    title_enabled: bool = True,
     workdir: str | None = None,
     engine: str | None = None,
     progress=None,
@@ -713,6 +770,7 @@ def generate(
     """
     输入文本 -> 合成语音 -> 按关键词把语音插入对应视频。
     signal_size 可覆盖配置里每条图标自己的 size（占画面宽度的比例）。
+    title_enabled 为真时自动从文本开头提取「XX气象台发布XX预警信号」贴到右上角。
     engine 指定语音引擎，不传则用 tts_config.json 里的配置（默认 edge）。
     返回结果字典列表。
     """
@@ -747,6 +805,9 @@ def generate(
     def tick(p: int, msg: str) -> None:
         if progress:
             progress(p, msg)
+
+    # 右上角标题：只从文本开头提取，提取不到就不贴
+    corner_title = extract_alert_title(text) if title_enabled else ""
 
     tmpdir = workdir or tempfile.mkdtemp(prefix="ttsvideo_")
     os.makedirs(tmpdir, exist_ok=True)
@@ -802,8 +863,13 @@ def generate(
             extras += f"，叠加预警图标「{sig_raw['label']}」"
         if caption_enabled:
             extras += "，正在叠加画面文字"
+        if corner_title:
+            extras += f"，右上角标题「{corner_title}」"
         tick(p0 + 10, f"正在合成 → {rule['label']}（{strategy}{extras}）")
-        render = build_video(rule["video"], audio_path, out_path, info, audio_dur, opts, style, sig)
+        render = build_video(
+            rule["video"], audio_path, out_path, info, audio_dur, opts, style, sig,
+            corner_text=corner_title, workdir=tmpdir,
+        )
 
         if not os.path.exists(out_path) or os.path.getsize(out_path) == 0:
             raise TaskError(f"合成结果为空：{rule['label']}")
@@ -831,6 +897,7 @@ def generate(
                     caption=bool(render.get("caption")),
                     lines=int(render.get("lines", 0)),
                     signal=(sig_raw["label"] if sig_raw else ""),
+                    title=corner_title,
                 )
             )
         )
@@ -862,6 +929,8 @@ if __name__ == "__main__":
     ap.add_argument("--no-signal", action="store_true", help="不叠加预警图标")
     ap.add_argument("--signal-size", type=float, default=None,
                     help="图标宽度占画面宽度的比例，如 0.22（默认 0.16）")
+    ap.add_argument("--no-title", action="store_true",
+                    help="不在右上角叠加「XX气象台发布XX预警信号」标题")
     args = ap.parse_args()
 
     for r in generate(
@@ -873,6 +942,7 @@ if __name__ == "__main__":
         caption_opacity=args.caption_opacity,
         signal_enabled=not args.no_signal,
         signal_size=args.signal_size,
+        title_enabled=not args.no_title,
         engine=args.engine,
         progress=lambda p, m: print(f"[{p:>3}%] {m}"),
     ):

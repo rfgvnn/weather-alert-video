@@ -68,6 +68,7 @@ class GenerateRequest(BaseModel):
     caption_opacity: float = 0.55
     signal: bool = True
     signal_size: float | None = None
+    title: bool = True
     engine: str | None = None
 
 
@@ -219,6 +220,7 @@ def api_generate(req: GenerateRequest):
                 caption_opacity=req.caption_opacity,
                 signal_enabled=req.signal,
                 signal_size=req.signal_size,
+                title_enabled=req.title,
                 engine=req.engine,
                 progress=hook,
             )

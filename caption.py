@@ -313,3 +313,80 @@ def _read_all(paths: list[str]) -> list[str]:
         with open(p, encoding="utf-8") as f:
             out.append(f.read())
     return out
+
+
+# ---------------------------------------------------------------- 右上角标题
+
+
+def split_title_lines(title: str) -> list[str]:
+    """
+    把「XX气象台发布XX预警信号」拆成两行。
+
+    优先在「发布」之后断开——这通常正好在一半附近（如「磁县气象台发布」7 字 /
+    「大风蓝色预警信号」8 字），而且不会把「大风」这类词拆散。
+    只有当这样切出来两行比例失衡（超过 1.8 倍）时，才退回按字数平均切分。
+    """
+    t = (title or "").strip()
+    if not t:
+        return []
+
+    i = t.find("发布")
+    if 0 < i < len(t) - 2:
+        a, b = t[: i + 2], t[i + 2 :]
+        ua, ub = line_units(a), line_units(b)
+        if ub > 0 and ua > 0 and max(ua, ub) <= min(ua, ub) * 1.8:
+            return [a, b]
+
+    half = (len(t) + 1) // 2
+    return [t[:half], t[half:]]
+
+
+def build_corner_filters(
+    width: int,
+    height: int,
+    line_files: list[str],
+    fontsize: int,
+    opacity: float = 0.45,
+    margin_x: float = 0.05,
+    margin_y: float = 0.06,
+    bg_color: str = "0x000000",
+) -> list[str]:
+    """
+    右上角两行小标题：半透明黑底 + 右对齐白字。
+    返回可直接接在其他滤镜后面的片段列表。
+    """
+    if not line_files:
+        return []
+
+    fs = float(fontsize)
+    line_h = fs * 1.55
+    pad_v = fs * 0.42
+    pad_h = fs * 0.55
+
+    max_units = 0.0
+    for line in _read_all(line_files):
+        max_units = max(max_units, line_units(line))
+
+    box_w = max_units * fs + pad_h * 2
+    box_h = len(line_files) * line_h + pad_v * 2
+    mx = width * margin_x
+    my = height * margin_y
+    box_x = width - box_w - mx
+    box_y = my
+
+    parts = [
+        "drawbox=x=%.1f:y=%.1f:w=%.1f:h=%.1f:color=%s@%.2f:t=fill"
+        % (box_x, box_y, box_w, box_h, bg_color, opacity)
+    ]
+
+    fontfile = esc_path(pick_font())
+    for i, tf in enumerate(line_files):
+        y = box_y + pad_v + i * line_h + (line_h - fs) * 0.35
+        parts.append(
+            "drawtext=fontfile='%s':textfile='%s':reload=0"
+            ":x=w-text_w-%.1f:y=%.1f"
+            ":fontsize=%d:fontcolor=white@0.98"
+            ":borderw=%d:bordercolor=black@0.30"
+            % (fontfile, esc_path(tf), mx + pad_h, y, int(fs), max(1, int(round(fs * 0.05))))
+        )
+    return parts

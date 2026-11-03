@@ -237,6 +237,18 @@
       </div>
 
       <div class="card">
+        <h2>右上角标题 <span class="tag">自动从开头提取</span></h2>
+        <div class="field">
+          <label>是否叠加</label>
+          <div class="segs" data-group="title">
+            <div class="seg on" data-v="yes">显示</div>
+            <div class="seg" data-v="no">不显示</div>
+          </div>
+        </div>
+        <p class="hint">自动从开头识别「XX气象台…发布XX预警信号」，提取成「XX气象台发布XX预警信号」，平均分成两行贴在右上角。开头没有气象台署名时不显示。</p>
+      </div>
+
+      <div class="card">
         <h2>音画对齐</h2>
         <div class="field">
           <label>语音比视频长时</label>
@@ -301,7 +313,7 @@ const el = {
   rulesPath:$('#rulesPath'), rulesHint:$('#rulesHint'),
   engine:$('#engine'), engineNote:$('#engineNote')
 };
-const opt = { overflow:'loop', underflow:'pad', resolution:'source', caption:'yes', captionSize:'medium' };
+const opt = { overflow:'loop', underflow:'pad', resolution:'source', caption:'yes', captionSize:'medium', title:'yes' };
 let rulesCache = [];
 let signalsCache = [];
 let engineId = 'edge';
@@ -473,6 +485,7 @@ function payload(){
     caption: opt.caption === 'yes',
     caption_size: opt.captionSize,
     caption_opacity: parseInt(opSlider.value,10)/100,
+    title: opt.title === 'yes',
     engine: engineId
   };
 }
@@ -575,6 +588,7 @@ function renderResults(list){
         <span>大小 <b>${r.size_mb} MB</b></span>
         ${r.caption ? `<span>画面文字 <b>${r.lines} 行</b></span>` : ''}
         ${r.signal ? `<span>预警图标 <b>${r.signal}</b></span>` : ''}
+        ${r.title ? `<span>右上标题 <b>${r.title}</b></span>` : ''}
       </div>
       <div class="links">
         <a class="dl" href="${r.url}" download="${r.file}">下载视频</a>
