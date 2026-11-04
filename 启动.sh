@@ -27,10 +27,32 @@ if [ -z "$PY" ]; then
   exit 1
 fi
 
+# ---------- 首次运行：自动创建虚拟环境 ----------
+# 目录里还没有 .venv / venv 时建一个，避免把依赖装进系统 Python。
+# 建失败不算致命（例如 Debian 未装 python3-venv），回退沿用系统 Python。
+if [ ! -x ".venv/bin/python" ] && [ ! -x "venv/bin/python" ]; then
+  echo "[首次运行] 正在创建虚拟环境 .venv ……"
+  if "$PY" -m venv .venv 2>/dev/null; then
+    PY=".venv/bin/python"
+    echo "[OK]   虚拟环境已就绪"
+  else
+    echo "[提示] 虚拟环境创建失败，沿用系统 Python：$PY"
+    echo "        Debian/Ubuntu 可先执行： sudo apt install python3-venv"
+  fi
+fi
+
 echo "使用解释器: $PY"
 "$PY" -c "import fastapi, uvicorn, edge_tts, imageio_ffmpeg" 2>/dev/null || {
-  echo "依赖不完整，正在安装（也可手动执行：pip install -r requirements.txt）"
-  "$PY" -m pip install -r requirements.txt
+  echo "依赖不完整，正在安装（也可手动执行：$PY -m pip install -r requirements.txt）"
+  "$PY" -m pip install -r requirements.txt || {
+    echo "[提示] 默认源失败，改用清华镜像重试……"
+    if ! "$PY" -m pip install -r requirements.txt \
+        -i https://pypi.tuna.tsinghua.edu.cn/simple; then
+      echo "[错误] 依赖安装失败，请检查网络后重试，或手动执行："
+      echo "       $PY -m pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple"
+      exit 1
+    fi
+  }
 }
 
 # 中文字体缺失时给个明确提示，避免字幕变方块
