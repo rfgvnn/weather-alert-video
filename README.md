@@ -6,10 +6,15 @@
 
 1. **装 Python 3.10+**：<https://www.python.org/downloads/> ，安装时务必勾选 **Add python.exe to PATH**
 2. **拿到代码**：`git clone <仓库地址>`，或在仓库页面点 **Code → Download ZIP** 后解压
-3. **双击 `启动.bat`**（macOS / Linux 用 `./启动.sh`）
+3. **双击 `启动.bat`**（Windows）。Linux / macOS 在终端里执行：
+
+   ```bash
+   chmod +x 启动.sh
+   ./启动.sh
+   ```
 
 首次运行会自动创建 `.venv` 虚拟环境并安装依赖（1~3 分钟，需联网），装完浏览器自动打开 `http://127.0.0.1:8765`。
-之后每次直接双击即可，不再重复安装。依赖装在项目内的 `.venv` 里，不会污染系统 Python。
+之后每次直接双击（或再跑一次 `./启动.sh`）即可，不再重复安装。依赖装在项目内的 `.venv` 里，不会污染系统 Python。
 
 > 依赖装不上时脚本会自动改用清华镜像重试。仍失败就手动执行：
 > `pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple`
@@ -33,8 +38,8 @@
 
 ## 怎么新增一个关键词（例如“暴雨”）
 
-1. 把对应的视频文件放到 `app\videos\` 目录里，例如 `app\videos\暴雨.mp4`
-2. 用记事本打开 `app\rules.json`，在 `rules` 里照着已有条目复制一份，改成：
+1. 把对应的视频文件放到 `videos\` 目录里，例如 `videos\暴雨.mp4`
+2. 用记事本打开 `rules.json`，在 `rules` 里照着已有条目复制一份，改成：
 
 ```json
 { "keywords": ["暴雨"], "video": "videos/暴雨.mp4", "label": "暴雨", "tag": "暴雨" }
@@ -65,7 +70,7 @@
 ]
 ```
 
-- 图标文件放在 `app\signals\` 目录（已内置大雾黄/橙两个，还放了风、雨、雷电等备用图标）
+- 图标文件放在 `signals\` 目录（已内置大雾黄/橙两个，还放了风、雨、雷电等备用图标）
 - **归属自动判断**：图标关键词里包含哪个视频的关键词（如「大雾橙色」包含「大雾」），就贴到哪个视频的成片上；也可以加 `"attach": "大雾"` 手动指定
 - **改图标大小 / 位置**：在该条 signal 里配置（都是相对画面的比例，改完点「重载规则」生效）
   - `"size": 0.33` — 图标宽度占画面宽度的比例（默认 0.33，即 33%，范围 0.05~0.5）
@@ -103,14 +108,24 @@
 ### Linux / macOS
 
 ```bash
-cd app
 chmod +x 启动.sh
 ./启动.sh                 # 默认 8765 端口，只监听本机
 HOST=0.0.0.0 ./启动.sh    # 允许局域网其他机器访问
 NO_BROWSER=1 ./启动.sh    # 服务器环境，不自动打开浏览器
+PORT=9000 ./启动.sh       # 换端口
 ```
 
-也可以直接运行：`pip install -r requirements.txt && python app.py`（`Ctrl+C` 停止）。
+和 Windows 一样，脚本会依次：找目录内的 `.venv` → 没有就用当前 Python 建一个 → 检查依赖、缺了自动装（失败自动换清华镜像）→ 跑一遍自检 → 启动服务。
+
+> **Debian / Ubuntu 首次运行前**建议先装 `python3-venv`，否则虚拟环境可能建不起来（脚本会提示并退回用系统 Python，依赖就装进系统了）：
+>
+> ```bash
+> sudo apt install python3-venv
+> ```
+>
+> 如果系统 Python 受 PEP 668 保护、pip 报 `externally-managed-environment`，原因相同——装好 `python3-venv` 让脚本走虚拟环境即可，不要用 `--break-system-packages` 硬装。
+
+也可以不用脚本，手动来：`python3 -m venv .venv && ./.venv/bin/pip install -r requirements.txt && ./.venv/bin/python app.py`（`Ctrl+C` 停止）。
 
 **Linux 上要先装好三样东西**（缺一样都会在自检里报出来）：
 
@@ -130,7 +145,7 @@ python 自检.py     # 检查 ffmpeg/编码器/中文字体/规则/素材/网络
 ```
 
 **把素材迁到 Linux**：`rules.json` 里的 Windows 路径（如 `C:/Users/.../大雾.mp4`）在 Linux 上不存在时，
-会自动回退到 `app/videos/` 目录下的同名文件。所以最简单的做法是——把整个 `app` 目录连同 `videos`、`signals`
+会自动回退到 `videos/` 目录下的同名文件。所以最简单的做法是——把整个项目目录连同 `videos`、`signals`
 一起拷到 Linux，视频放在 `videos/` 里即可，无需改配置。
 
 ## 界面功能
@@ -166,7 +181,7 @@ python core.py --text "今夜有大雾" --engine edge --voice zh-CN-YunyangNeura
 ## 目录结构
 
 ```
-app/
+weather-alert-video/          ← 仓库根目录，启动脚本就放在这一层
 ├── app.py          FastAPI 服务（异步任务 + 结果文件）
 ├── core.py         TTS、关键词路由、ffmpeg 合成逻辑
 ├── tts.py          可插拔语音引擎适配层（当前内置 edge）
@@ -176,7 +191,8 @@ app/
 ├── videos/         放视频素材的目录（rules.json 里可用相对路径引用）
 ├── signals/        放预警图标（GIF/PNG）的目录
 ├── static/index.html   界面
-├── outputs/        生成的成片
+├── outputs/        生成的成片（自动创建，已 gitignore）
+├── .venv/          Python 虚拟环境（首次启动自动创建，已 gitignore）
 ├── 启动.bat        Windows 启动脚本
 ├── 启动.sh         Linux / macOS 启动脚本
 ├── 自检.py         环境自检（ffmpeg / 字体 / 规则 / 网络）
