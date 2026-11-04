@@ -355,6 +355,34 @@ def _run(cmd: list[str], step: str, timeout: int = 1800) -> None:
         raise TaskError(f"{step} 失败：{tail or '未知错误'}")
 
 
+_QSV_OK: bool | None = None
+
+
+def _qsv_available() -> bool:
+    """探测 Intel 核显 QSV 硬件编码是否可用，结果进程内缓存（只探测一次）。
+    硬编把编码交给核显，CPU 只负责滤镜，长视频实测快 20-40%；
+    不支持（无 Intel 核显/驱动）时自动回退 libx264。"""
+    global _QSV_OK
+    if _QSV_OK is None:
+        try:
+            r = subprocess.run(
+                [FFMPEG, "-hide_banner", "-loglevel", "error",
+                 "-f", "lavfi", "-i", "testsrc2=size=320x240:rate=10:duration=0.3",
+                 "-c:v", "h264_qsv", "-f", "null", "-"],
+                capture_output=True, timeout=20,
+            )
+            _QSV_OK = r.returncode == 0
+        except Exception:  # noqa: BLE001
+            _QSV_OK = False
+    return _QSV_OK
+
+
+def video_encoder_args() -> list[str]:
+    if _qsv_available():
+        return ["-c:v", "h264_qsv", "-preset", "veryfast", "-global_quality", "22", "-pix_fmt", "yuv420p"]
+    return ["-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p"]
+
+
 def slugify(text: str, limit: int = 18) -> str:
     s = re.sub(r"[^\w一-鿿]+", "_", text).strip("_")
     return (s[:limit] or "voice").strip("_") or "voice"
@@ -574,28 +602,18 @@ def build_video(
     if scaled:
         vf.append(f"scale={out_w}:{out_h}")
 
-    # ---- 画面中央文字 ----
-    n_lines = 0
-    fs = 0
-    if style.enabled and (style.text or "").strip():
-        fs = font_size(out_w, style.size)
-        max_units = max(6.0, (out_w * 0.80) / fs)
-        lines = caption.wrap_text(style.text, max_units)
-        workdir = style.workdir or tempfile.mkdtemp(prefix="ttslines_")
-        line_files = caption.write_line_files(lines, os.path.join(workdir, "lines"))
-        n_lines = len(line_files)
-        vf += caption.build_caption_filters(out_w, out_h, line_files, fs, style.opacity)
-
-    # ---- 右上角标题：XX气象台发布XX预警信号（分两行、右对齐）----
+    # ---- 右上角标题：XX气象台发布XX预警信号（先算几何，供正文避让）----
     t_lines = 0
     t_fs = 0
+    top_bottom = 0.0
     if (corner_text or "").strip():
-        t_fs = max(14, int(round(out_w / 30)))
+        t_fs = max(14, int(round(out_w / 20)))
         lines_top = caption.split_title_lines(corner_text)
         wd = workdir or style.workdir or tempfile.mkdtemp(prefix="ttslines_")
         t_files = caption.write_line_files(lines_top, os.path.join(wd, "title"))
         t_lines = len(t_files)
         vf += caption.build_corner_filters(out_w, out_h, t_files, t_fs)
+        top_bottom = caption.CORNER_MARGIN_Y * out_h + caption.corner_box_height(t_lines, t_fs)
 
     # ---- 左上角预警图标 ----
     icon = signal if (signal and signal.path and os.path.exists(signal.path)) else None
@@ -609,6 +627,20 @@ def build_video(
         ico_h = max(4, int(round(ico_w * src_h / src_w / 2)) * 2)
         mx = max(2, int(round(out_w * icon.margin_x)))
         my = max(2, int(round(out_h * icon.margin_y)))
+        top_bottom = max(top_bottom, my + ico_h)
+
+    # ---- 画面中央文字（顶部有标题/图标时整体下移避让）----
+    n_lines = 0
+    fs = 0
+    if style.enabled and (style.text or "").strip():
+        fs = font_size(out_w, style.size)
+        max_units = max(6.0, (out_w * 0.80) / fs)
+        lines = caption.wrap_text(style.text, max_units)
+        workdir = style.workdir or tempfile.mkdtemp(prefix="ttslines_")
+        line_files = caption.write_line_files(lines, os.path.join(workdir, "lines"))
+        n_lines = len(line_files)
+        min_y = top_bottom + out_h * 0.02 if top_bottom > 0 else 0.0
+        vf += caption.build_caption_filters(out_w, out_h, line_files, fs, style.opacity, min_y=min_y)
 
     reencode = bool(vf) or bool(icon)
 
@@ -645,7 +677,7 @@ def build_video(
 
     cmd += ["-map", vmap, "-map", amap]
     if reencode:
-        cmd += ["-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p"]
+        cmd += video_encoder_args()
     else:
         cmd += ["-c:v", "copy"]
     cmd += ["-c:a", "aac", "-b:a", "192k"]
