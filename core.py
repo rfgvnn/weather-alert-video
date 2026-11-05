@@ -602,6 +602,10 @@ def build_video(
     if scaled:
         vf.append(f"scale={out_w}:{out_h}")
 
+    # 文字块以透明 PNG 输入 + overlay 滤镜贴图（drawtext 在部分 ffmpeg 精简版里不存在，
+    # overlay 则到处都有）。overlays 依 (png 路径, x, y) 顺序叠放。
+    overlays: list[tuple[str, int, int]] = []
+
     # ---- 右上角标题：XX气象台发布XX预警信号（先算几何，供正文避让）----
     t_lines = 0
     t_fs = 0
@@ -609,11 +613,13 @@ def build_video(
     if (corner_text or "").strip():
         t_fs = max(14, int(round(out_w / 20)))
         lines_top = caption.split_title_lines(corner_text)
+        t_lines = len(lines_top)
         wd = workdir or style.workdir or tempfile.mkdtemp(prefix="ttslines_")
-        t_files = caption.write_line_files(lines_top, os.path.join(wd, "title"))
-        t_lines = len(t_files)
-        vf += caption.build_corner_filters(out_w, out_h, t_files, t_fs)
-        top_bottom = caption.CORNER_MARGIN_Y * out_h + caption.corner_box_height(t_lines, t_fs)
+        png, px, py = caption.render_corner_png(
+            out_w, out_h, lines_top, t_fs, outdir=os.path.join(wd, "title")
+        )
+        overlays.append((png, px, py))
+        top_bottom = caption.CORNER_MARGIN_Y * out_h + caption.corner_box_height(len(lines_top), t_fs)
 
     # ---- 左上角预警图标 ----
     icon = signal if (signal and signal.path and os.path.exists(signal.path)) else None
@@ -636,13 +642,16 @@ def build_video(
         fs = font_size(out_w, style.size)
         max_units = max(6.0, (out_w * 0.80) / fs)
         lines = caption.wrap_text(style.text, max_units)
-        workdir = style.workdir or tempfile.mkdtemp(prefix="ttslines_")
-        line_files = caption.write_line_files(lines, os.path.join(workdir, "lines"))
-        n_lines = len(line_files)
+        wd = style.workdir or workdir or tempfile.mkdtemp(prefix="ttslines_")
+        n_lines = len(lines)
         min_y = top_bottom + out_h * 0.02 if top_bottom > 0 else 0.0
-        vf += caption.build_caption_filters(out_w, out_h, line_files, fs, style.opacity, min_y=min_y)
+        png, bx, by = caption.render_caption_png(
+            out_w, out_h, lines, fs, style.opacity, min_y=min_y,
+            outdir=os.path.join(wd, "lines"),
+        )
+        overlays.append((png, bx, by))
 
-    reencode = bool(vf) or bool(icon)
+    reencode = bool(vf) or bool(icon) or bool(overlays)
 
     cmd = [FFMPEG, "-y", "-hide_banner", "-loglevel", "error"]
     if need_loop:
@@ -653,17 +662,26 @@ def build_video(
     if icon:
         # 图标作为第 3 个输入（音频仍是第 2 个，索引不变）
         cmd += ["-i", icon.path]
+    for png_path, _x, _y in overlays:
+        cmd += ["-i", png_path]
 
     fc: list[str] = []
-    if vf or icon:
+    if reencode:
         base_chain = ",".join(vf) if vf else "null"
+        cur = "[base]" if (icon or overlays) else "[vout]"
+        fc.append(f"[0:v:0]{base_chain}{cur}")
+        chain_in: list[tuple[str, int, int]] = []
+        png_base = 3 if icon else 2
         if icon:
-            fc.append(f"[0:v:0]{base_chain}[base]")
-            fc.append(f"[2:v:0]scale={ico_w}:{ico_h}[ico]")
-            fc.append(f"[base][ico]overlay=x={mx}:y={my}:eof_action=repeat[vout]")
-        else:
-            fc.append(f"[0:v:0]{base_chain}[vout]")
-        vmap = "[vout]"
+            fc.append(f"[2:v:0]scale={ico_w}:{ico_h}[s0]")
+            chain_in.append(("s0", mx, my))
+        for k, (p, x, y) in enumerate(overlays):
+            chain_in.append((f"{png_base + k}:v:0", x, y))
+        for k, (src, x, y) in enumerate(chain_in):
+            dst = "[vout]" if k == len(chain_in) - 1 else f"[t{k}]"
+            fc.append(f"{cur}[{src}]overlay=x={x}:y={y}:eof_action=repeat{dst}")
+            cur = dst
+        vmap = cur
     else:
         vmap = "0:v:0"
     if pad_audio:

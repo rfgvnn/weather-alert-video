@@ -7,3 +7,4 @@ imageio-ffmpeg>=0.4.9      # 自带 ffmpeg 二进制（若系统已装 ffmpeg �
 fastapi>=0.110             # Web 服务
 uvicorn>=0.27              # ASGI 服务器
 python-multipart>=0.0.9    # 表单支持
+pillow>=10.0               # 文字渲染成透明 PNG，配合 overlay 滤镜贴图

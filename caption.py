@@ -14,13 +14,18 @@ import shutil
 import subprocess
 import unicodedata
 
-# 按平台依次尝试：Windows -> Linux -> macOS -> fontconfig 查询 -> 目录扫描
+# 按平台依次尝试：Windows -> 项目自带 -> Linux -> macOS -> fontconfig 查询 -> 目录扫描
+_BUNDLED_FONT = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "fonts", "wqy-microhei.ttc"
+)
 FONT_CANDIDATES = [
     # Windows
     (r"C:\Windows\Fonts\msyhbd.ttc", "微软雅黑 粗体"),
     (r"C:\Windows\Fonts\msyh.ttc", "微软雅黑"),
     (r"C:\Windows\Fonts\simhei.ttf", "黑体"),
     (r"C:\Windows\Fonts\Dengb.ttf", "等线 粗体"),
+    # 项目自带（云端/无字体的服务器上兜底，GPL 授权可自由分发）
+    (_BUNDLED_FONT, "文泉驿微米黑（自带）"),
     # Linux：Debian/Ubuntu 的 fonts-noto-cjk、CentOS 的 wqy / cjkuni
     ("/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc", "Noto Sans CJK Bold"),
     ("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc", "Noto Sans CJK"),
@@ -271,32 +276,82 @@ def write_merged_file(lines: list[str], outdir: str) -> str:
     return p
 
 
-def build_caption_filters(
+def _load_font(fs: int):
+    from PIL import ImageFont
+
+    return ImageFont.truetype(pick_font(), fs)
+
+
+def _render_block(
+    lines: list[str],
+    fs: int,
+    box_w: int,
+    box_h: int,
+    *,
+    align: str,
+    box_rgba: tuple[int, int, int, int] | None,
+    pad_h: int,
+    pad_v: int,
+    line_h: int,
+    border_ratio: float,
+    border_alpha: int,
+    text_alpha: int,
+    outdir: str,
+    prefix: str,
+) -> str:
+    """把文字块渲染成透明底 PNG（半透明底板可选、描边可选），返回文件路径。"""
+    from PIL import Image, ImageDraw
+
+    font = _load_font(fs)
+    sw = max(1, int(round(fs * border_ratio)))
+    os.makedirs(outdir, exist_ok=True)
+    png = os.path.join(outdir, f"{prefix}.png")
+
+    img = Image.new("RGBA", (max(2, box_w), max(2, box_h)), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    if box_rgba is not None:
+        d.rectangle([0, 0, img.width - 1, img.height - 1], fill=box_rgba)
+
+    for i, ln in enumerate(lines):
+        bbox = d.textbbox((0, 0), ln, font=font, stroke_width=sw)
+        tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
+        y = pad_v + i * line_h + (line_h - th) / 2 - bbox[1]
+        if align == "right":
+            x = img.width - pad_h - tw - bbox[0]
+        else:
+            x = (img.width - tw) / 2 - bbox[0]
+        d.text(
+            (x, y), ln, font=font, fill=(255, 255, 255, text_alpha),
+            stroke_width=sw, stroke_fill=(0, 0, 0, border_alpha),
+        )
+    img.save(png)
+    return png
+
+
+def render_caption_png(
     width: int,
     height: int,
-    line_files: list[str],
+    lines: list[str],
     fontsize: int,
     opacity: float,
-    bg_color: str = "0x404040",
+    bg_rgb: tuple[int, int, int] = (0x40, 0x40, 0x40),
     min_y: float = 0.0,
-) -> list[str]:
+    outdir: str = ".",
+) -> tuple[str, int, int]:
     """
-    返回可以直接接在其他滤镜后面的滤镜片段列表（不含输入/输出标签）。
-    多行正文合并为一条 drawtext（text_align=C 逐行居中），滤镜条数不随行数增长，
-    文字越长合成越快（实测长视频提速约 1/3）。
-    min_y：正文底框允许的最高位置（顶部有标题/图标时传入，避免重叠，超出则整体下移）。
+    正文文字块：半透明灰底板 + 白字黑描边，渲染为一张透明底 PNG。
+    返回 (png 路径, 叠放 x, 叠放 y)。
+    min_y：底板允许的最高位置（顶部有标题/图标时传入，避免重叠，超出则整体下移）。
     """
-    if not line_files:
-        return []
+    if not lines:
+        raise ValueError("lines 为空")
 
     fs = float(fontsize)
     line_h = fs * 1.62
     pad_v = fs * 0.72
     pad_h = fs * 0.95
 
-    lines = _read_all(line_files)
     max_units = max(line_units(t) for t in lines)
-
     box_w = min(width * 0.92, max_units * fs + pad_h * 2)
     box_h = len(lines) * line_h + pad_v * 2
     box_x = (width - box_w) / 2
@@ -307,24 +362,17 @@ def build_caption_filters(
         # 底部留 1.5% 安全边距；若与避让下限冲突，优先避让
         box_y = min(box_y, max(min_y, height * 0.985 - box_h))
 
-    parts = [
-        "drawbox=x=%.1f:y=%.1f:w=%.1f:h=%.1f:color=%s@%.2f:t=fill"
-        % (box_x, box_y, box_w, box_h, bg_color, opacity)
-    ]
-
-    merged = write_merged_file(lines, os.path.dirname(line_files[0]) or ".")
-    fontfile = esc_path(pick_font())
-    y = box_y + pad_v + (line_h - fs) * 0.42
-    parts.append(
-        "drawtext=fontfile='%s':textfile='%s':reload=0"
-        ":x=(w-text_w)/2:y=%.1f"
-        ":fontsize=%d:line_spacing=%d:text_align=C"
-        ":fontcolor=white@0.98"
-        ":borderw=%d:bordercolor=black@0.25"
-        % (fontfile, esc_path(merged), y, int(fs), max(0, int(round(line_h - fs))),
-           max(1, int(round(fs * 0.045))))
+    png = _render_block(
+        lines, int(fontsize), int(round(box_w)), int(round(box_h)),
+        align="center",
+        box_rgba=(bg_rgb[0], bg_rgb[1], bg_rgb[2], int(round(opacity * 255))),
+        pad_h=int(round(pad_h)), pad_v=int(round(pad_v)),
+        line_h=int(round(line_h)), border_ratio=0.045,
+        border_alpha=int(round(0.25 * 255)),
+        text_alpha=int(round(0.98 * 255)),
+        outdir=outdir, prefix="caption",
     )
-    return parts
+    return png, int(round(box_x)), int(round(box_y))
 
 
 def _read_all(paths: list[str]) -> list[str]:
@@ -371,54 +419,42 @@ def split_title_lines(title: str) -> list[str]:
     return [t[:half], t[half:]]
 
 
-def build_corner_filters(
+def render_corner_png(
     width: int,
     height: int,
-    line_files: list[str],
+    lines: list[str],
     fontsize: int,
-    opacity: float = 0.45,
     margin_x: float = CORNER_MARGIN_X,
     margin_y: float = CORNER_MARGIN_Y,
-    bg_color: str = "0x000000",
-) -> list[str]:
+    outdir: str = ".",
+) -> tuple[str, int, int]:
     """
-    右上角两行小标题：半透明黑底 + 右对齐白字。
-    两行合并为一条 drawtext（text_align=R 逐行右对齐），减少滤镜条数。
-    返回可直接接在其他滤镜后面的片段列表。
+    右上角两行小标题：半透明黑底 + 右对齐白字，渲染为一张透明底 PNG。
+    返回 (png 路径, 叠放 x, 叠放 y)。
     """
-    if not line_files:
-        return []
+    if not lines:
+        raise ValueError("lines 为空")
 
     fs = float(fontsize)
     line_h = fs * 1.55
     pad_v = fs * 0.42
     pad_h = fs * 0.55
 
-    lines = _read_all(line_files)
     max_units = max(line_units(t) for t in lines)
-
     box_w = max_units * fs + pad_h * 2
     box_h = len(lines) * line_h + pad_v * 2
     mx = width * margin_x
     my = height * margin_y
     box_x = width - box_w - mx
-    box_y = my
 
-    parts = [
-        "drawbox=x=%.1f:y=%.1f:w=%.1f:h=%.1f:color=%s@%.2f:t=fill"
-        % (box_x, box_y, box_w, box_h, bg_color, opacity)
-    ]
-
-    merged = write_merged_file(lines, os.path.dirname(line_files[0]) or ".")
-    fontfile = esc_path(pick_font())
-    y = box_y + pad_v + (line_h - fs) * 0.35
-    parts.append(
-        "drawtext=fontfile='%s':textfile='%s':reload=0"
-        ":x=w-text_w-%.1f:y=%.1f"
-        ":fontsize=%d:line_spacing=%d:text_align=R"
-        ":fontcolor=white@0.98"
-        ":borderw=%d:bordercolor=black@0.30"
-        % (fontfile, esc_path(merged), mx + pad_h, y, int(fs),
-           max(0, int(round(line_h - fs))), max(1, int(round(fs * 0.05))))
+    png = _render_block(
+        lines, int(fontsize), int(round(box_w)), int(round(box_h)),
+        align="right",
+        box_rgba=(0, 0, 0, int(round(0.45 * 255))),
+        pad_h=int(round(pad_h)), pad_v=int(round(pad_v)),
+        line_h=int(round(line_h)), border_ratio=0.05,
+        border_alpha=int(round(0.30 * 255)),
+        text_alpha=int(round(0.98 * 255)),
+        outdir=outdir, prefix="title",
     )
-    return parts
+    return png, int(round(box_x)), int(round(my))
