@@ -6,11 +6,11 @@
 <title>文本转语音 · 视频合成</title>
 <style>
   :root{
-    --bg:#f5f7fa;
+    --bg:#f4f6fb;
     --panel:#ffffff;
-    --border:#e3e8ef;
-    --text:#1f2733;
-    --muted:#6b7684;
+    --border:#e5e9f2;
+    --text:#1c2430;
+    --muted:#69748a;
     --primary:#2563eb;
     --primary-dark:#1d4ed8;
     --primary-soft:#eef4ff;
@@ -20,24 +20,29 @@
     --thunder-soft:#eef0ff;
     --danger:#dc2626;
     --success:#059669;
-    --radius:14px;
-    --shadow:0 1px 2px rgba(16,24,40,.04), 0 8px 24px rgba(16,24,40,.06);
+    --radius:16px;
+    --shadow:0 1px 2px rgba(16,24,40,.05), 0 10px 30px -12px rgba(16,24,40,.12);
   }
   *{box-sizing:border-box;margin:0;padding:0}
   body{
     font-family:"Microsoft YaHei","PingFang SC","Segoe UI",system-ui,sans-serif;
-    background:var(--bg);color:var(--text);line-height:1.6;
+    background:
+      radial-gradient(1200px 400px at 15% -10%, rgba(37,99,235,.07), transparent 60%),
+      radial-gradient(900px 380px at 95% -5%, rgba(99,102,241,.06), transparent 55%),
+      var(--bg);
+    color:var(--text);line-height:1.6;
     -webkit-font-smoothing:antialiased;
   }
-  .wrap{max-width:1180px;margin:0 auto;padding:24px 20px 60px}
+  .wrap{max-width:1180px;margin:0 auto;padding:28px 20px 64px}
 
-  header{display:flex;align-items:center;gap:14px;margin-bottom:22px}
+  header{display:flex;align-items:center;gap:14px;margin-bottom:26px}
   .logo{
-    width:42px;height:42px;border-radius:12px;flex:none;
+    width:46px;height:46px;border-radius:13px;flex:none;
     background:linear-gradient(135deg,#2563eb,#6366f1);
     display:flex;align-items:center;justify-content:center;
+    box-shadow:0 8px 20px -6px rgba(37,99,235,.45);
   }
-  header h1{font-size:20px;font-weight:600;letter-spacing:.3px}
+  header h1{font-size:20px;font-weight:700;letter-spacing:.3px}
   header p{font-size:13px;color:var(--muted)}
 
   .rules{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px;margin-bottom:10px}
@@ -51,94 +56,133 @@
   .rule .alias{font-size:11px;color:var(--muted);margin-top:2px}
   .rule.miss{opacity:.55}
   .rule.hit{border-color:var(--kw);transform:translateY(-2px);background:var(--kwbg);
-    box-shadow:0 6px 18px rgba(16,24,40,.1)}
+    box-shadow:0 8px 22px -8px rgba(16,24,40,.18)}
   .dot{width:9px;height:9px;border-radius:50%;background:var(--kw);opacity:.35;flex:none}
   .rule.hit .dot{opacity:1;box-shadow:0 0 0 4px rgba(0,0,0,.05)}
   .rule .meta{margin-left:auto;text-align:right;font-size:11px;color:var(--muted);line-height:1.4}
-  .ruletools{display:flex;align-items:center;gap:8px;margin-bottom:18px;flex-wrap:wrap}
+  .ruletools{display:flex;align-items:center;gap:8px;margin-bottom:20px;flex-wrap:wrap}
   .ruletools .path{font-size:11.5px;color:var(--muted);font-family:Consolas,monospace;
     overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:52%}
-  .ruletools button{font-size:12px;padding:6px 12px;border-radius:8px}
+  .ruletools button{font-size:12px;padding:6px 12px;border-radius:9px}
+  .ruletools button:hover{border-color:#c7d0dd;background:#fafbfc}
 
   .grid{display:grid;grid-template-columns:1.15fr .85fr;gap:18px;align-items:start}
   .card{
     background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);
-    padding:18px;box-shadow:var(--shadow);margin-bottom:18px;
+    padding:20px;box-shadow:var(--shadow);margin-bottom:18px;
   }
-  .card h2{font-size:14px;font-weight:600;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+  .card h2{
+    font-size:14px;font-weight:700;margin-bottom:14px;display:flex;align-items:center;gap:9px;
+  }
+  .card h2::before{
+    content:"";width:4px;height:15px;border-radius:99px;flex:none;
+    background:linear-gradient(180deg,#2563eb,#6366f1);
+  }
   .card h2 .tag{font-size:11px;font-weight:400;color:var(--muted)}
 
   textarea{
     width:100%;min-height:150px;resize:vertical;border:1px solid var(--border);
-    border-radius:10px;padding:14px;font-size:15px;font-family:inherit;line-height:1.7;
-    color:var(--text);background:#fcfdfe;transition:.2s;
+    border-radius:12px;padding:14px;font-size:15px;font-family:inherit;line-height:1.7;
+    color:var(--text);background:#fbfcfe;transition:.2s;
   }
-  textarea:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px rgba(37,99,235,.1);background:#fff}
+  textarea:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px rgba(37,99,235,.12);background:#fff}
   textarea::placeholder{color:#a8b1bd}
 
   .row{display:flex;align-items:center;gap:10px;margin-top:12px}
   .counter{font-size:12px;color:var(--muted);margin-left:auto}
 
+  .divider{height:1px;background:var(--border);margin:18px -20px;padding:0 20px;
+    background:linear-gradient(90deg,transparent,var(--border) 12%,var(--border) 88%,transparent)}
+
   .field{margin-top:14px}
-  .field label{display:block;font-size:12.5px;color:var(--muted);margin-bottom:6px}
+  .field label{display:block;font-size:12.5px;color:var(--muted);margin-bottom:7px}
   select,input[type=range]{
     width:100%;
   }
   select{
-    border:1px solid var(--border);border-radius:9px;padding:9px 10px;font-size:14px;
-    background:#fff;color:var(--text);font-family:inherit;cursor:pointer;
+    border:1px solid var(--border);border-radius:10px;padding:9px 10px;font-size:14px;
+    background:#fff;color:var(--text);font-family:inherit;cursor:pointer;transition:.2s;
   }
-  select:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px rgba(37,99,235,.1)}
+  select:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px rgba(37,99,235,.12)}
   input[type=range]{accent-color:var(--primary);cursor:pointer}
   .rangeval{float:right;font-weight:600;color:var(--text);font-size:12.5px}
 
-  .segs{display:flex;gap:6px;margin-top:8px}
+  /* 分段选择：iOS 风格药丸组 */
+  .segs{display:flex;gap:4px;margin-top:8px;background:#eef1f7;border-radius:11px;padding:3px}
   .seg{
-    flex:1;text-align:center;font-size:12.5px;padding:7px 4px;border:1px solid var(--border);
-    border-radius:8px;cursor:pointer;color:var(--muted);background:#fff;transition:.18s;
+    flex:1;text-align:center;font-size:12.5px;padding:7px 4px;border:none;border-radius:9px;
+    cursor:pointer;color:var(--muted);background:transparent;transition:.18s;
   }
-  .seg:hover{border-color:#c7d0dd}
-  .seg.on{background:var(--primary-soft);border-color:var(--primary);color:var(--primary-dark);font-weight:600}
+  .seg:hover{color:var(--text)}
+  .seg.on{
+    background:#fff;color:var(--primary-dark);font-weight:600;
+    box-shadow:0 1px 3px rgba(16,24,40,.14);
+  }
+
+  /* 可折叠抽屉（配音等次要设置） */
+  .fold{margin-top:14px;border:1px solid var(--border);border-radius:12px;background:#fbfcfe;overflow:hidden}
+  .fold summary{
+    list-style:none;cursor:pointer;user-select:none;
+    display:flex;align-items:center;gap:8px;
+    font-size:13px;font-weight:600;color:var(--text);padding:11px 14px;
+  }
+  .fold summary::-webkit-details-marker{display:none}
+  .fold summary::after{
+    content:"";margin-left:auto;width:8px;height:8px;flex:none;
+    border-right:2px solid var(--muted);border-bottom:2px solid var(--muted);
+    transform:rotate(45deg);transition:.2s;margin-top:-4px;
+  }
+  .fold[open] summary::after{transform:rotate(225deg);margin-top:4px}
+  .fold summary .sumtag{font-size:11px;font-weight:400;color:var(--muted)}
+  .fold .foldbody{padding:2px 14px 14px}
 
   .actions{display:flex;gap:10px;margin-top:18px;flex-wrap:wrap}
   button{
-    font-family:inherit;font-size:14px;border-radius:10px;padding:11px 18px;cursor:pointer;
+    font-family:inherit;font-size:14px;border-radius:11px;padding:11px 18px;cursor:pointer;
     border:1px solid var(--border);background:#fff;color:var(--text);transition:.18s;
   }
   button:hover:not(:disabled){border-color:#c7d0dd;background:#fafbfc}
   button:disabled{opacity:.5;cursor:not-allowed}
   .btn-primary{
-    background:var(--primary);color:#fff;border-color:var(--primary);font-weight:600;flex:1;min-width:150px;
+    background:linear-gradient(135deg,#2563eb,#4f46e5);color:#fff;border-color:transparent;
+    font-weight:600;flex:1;min-width:150px;
+    box-shadow:0 8px 18px -6px rgba(37,99,235,.5);
   }
-  .btn-primary:hover:not(:disabled){background:var(--primary-dark);border-color:var(--primary-dark)}
+  .btn-primary:hover:not(:disabled){filter:brightness(1.06);transform:translateY(-1px)}
 
   .progress{margin-top:16px;display:none}
   .bar{height:8px;border-radius:99px;background:#e9edf3;overflow:hidden}
-  .bar>i{display:block;height:100%;width:0;border-radius:99px;background:linear-gradient(90deg,#2563eb,#6366f1);transition:width .35s}
+  .bar>i{
+    display:block;height:100%;width:0;border-radius:99px;
+    background:linear-gradient(90deg,#2563eb,#6366f1,#2563eb);
+    background-size:200% 100%;animation:flow 1.6s linear infinite;transition:width .35s;
+  }
+  @keyframes flow{to{background-position:-200% 0}}
   .ptext{display:flex;justify-content:space-between;font-size:12.5px;color:var(--muted);margin-top:7px}
 
-  .alert{margin-top:14px;padding:11px 14px;border-radius:10px;font-size:13px;display:none;white-space:pre-line}
+  .alert{margin-top:14px;padding:11px 14px;border-radius:11px;font-size:13px;display:none;white-space:pre-line}
   .alert.err{background:#fef2f2;color:var(--danger);border:1px solid #fecaca}
   .alert.ok{background:#ecfdf5;color:var(--success);border:1px solid #a7f3d0}
 
-  .result{border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:14px;background:#fcfdfe}
+  .result{border:1px solid var(--border);border-radius:13px;padding:14px;margin-bottom:14px;background:#fbfcfe;transition:.2s}
+  .result:hover{border-color:#d5dcea}
   .result:last-child{margin-bottom:0}
   .rhead{display:flex;align-items:center;gap:10px;margin-bottom:10px}
-  .badge{font-size:12px;padding:3px 9px;border-radius:99px;font-weight:600}
+  .badge{font-size:12px;padding:3px 10px;border-radius:99px;font-weight:600}
   .badge.fog{background:var(--fog-soft);color:#0369a1}
   .badge.thunder{background:var(--thunder-soft);color:#4338ca}
   .rhead .strat{font-size:11.5px;color:var(--muted);margin-left:auto;text-align:right}
-  video{width:100%;border-radius:9px;background:#000;max-height:340px}
+  video{width:100%;border-radius:10px;background:#000;max-height:340px}
   .rinfo{display:flex;flex-wrap:wrap;gap:12px;font-size:11.5px;color:var(--muted);margin-top:9px}
   .rinfo b{color:var(--text);font-weight:600}
   .links{display:flex;gap:8px;margin-top:11px}
   .links a,.links button{
     font-size:12.5px;padding:7px 12px;text-decoration:none;border:1px solid var(--border);
-    border-radius:8px;color:var(--text);background:#fff;cursor:pointer;
+    border-radius:9px;color:var(--text);background:#fff;cursor:pointer;
   }
   .links a.dl{background:var(--primary-soft);border-color:#c7dbff;color:var(--primary-dark);font-weight:600}
 
-  .empty{color:var(--muted);font-size:13px;text-align:center;padding:26px 10px;border:1px dashed var(--border);border-radius:10px}
+  .empty{color:var(--muted);font-size:13px;text-align:center;padding:26px 10px;border:1px dashed var(--border);border-radius:11px}
   .hist{font-size:13px}
   .hist li{list-style:none;display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #f0f3f7}
   .hist li:last-child{border-bottom:none}
@@ -188,32 +232,34 @@
           <span class="counter"><span id="len">0</span> 字</span>
         </div>
         <audio id="player" style="display:none"></audio>
+
+        <details class="fold">
+          <summary>配音设置 <span class="sumtag" id="engineNote"></span></summary>
+          <div class="foldbody">
+            <div class="field">
+              <label>语音引擎</label>
+              <select id="engine"></select>
+            </div>
+            <div class="field">
+              <label>发音人</label>
+              <select id="voice"></select>
+            </div>
+            <div class="field">
+              <label>语速 <span class="rangeval" id="rateVal">0%</span></label>
+              <input type="range" id="rate" min="-50" max="100" value="0" step="5" />
+            </div>
+            <div class="field">
+              <label>音量 <span class="rangeval" id="volVal">0%</span></label>
+              <input type="range" id="vol" min="-50" max="50" value="0" step="5" />
+            </div>
+          </div>
+        </details>
       </div>
 
       <div class="card">
-        <h2>配音设置</h2>
-        <div class="field">
-          <label>语音引擎 <span class="tag" id="engineNote" style="float:right"></span></label>
-          <select id="engine"></select>
-        </div>
-        <div class="field">
-          <label>发音人</label>
-          <select id="voice"></select>
-        </div>
-        <div class="field">
-          <label>语速 <span class="rangeval" id="rateVal">0%</span></label>
-          <input type="range" id="rate" min="-50" max="100" value="0" step="5" />
-        </div>
-        <div class="field">
-          <label>音量 <span class="rangeval" id="volVal">0%</span></label>
-          <input type="range" id="vol" min="-50" max="50" value="0" step="5" />
-        </div>
-      </div>
-
-      <div class="card">
-        <h2>画面文字 <span class="tag">叠加在视频正中</span></h2>
-        <div class="field">
-          <label>是否叠加</label>
+        <h2>画面叠加</h2>
+        <div class="field" style="margin-top:0">
+          <label>正文文字（显示在视频中央）</label>
           <div class="segs" data-group="caption">
             <div class="seg on" data-v="yes">显示文字</div>
             <div class="seg" data-v="no">不显示</div>
@@ -233,24 +279,20 @@
             <input type="range" id="opacity" min="15" max="85" value="55" step="5" />
           </div>
         </div>
-        <p class="hint">文字为白色、自动换行并水平垂直居中，底板为半透明灰色，随画面尺寸自适应缩放。</p>
-      </div>
-
-      <div class="card">
-        <h2>右上角标题 <span class="tag">自动从开头提取</span></h2>
-        <div class="field">
-          <label>是否叠加</label>
+        <div class="divider"></div>
+        <div class="field" style="margin-top:0">
+          <label>右上角标题（自动提取）</label>
           <div class="segs" data-group="title">
             <div class="seg on" data-v="yes">显示</div>
             <div class="seg" data-v="no">不显示</div>
           </div>
         </div>
-        <p class="hint">自动从开头识别「XX气象台…发布XX预警信号」，提取成「XX气象台发布XX预警信号」，平均分成两行贴在右上角。开头没有气象台署名时不显示。</p>
+        <p class="hint">正文为白色带半透明底板、自动换行居中；右上角自动识别开头「XX气象台…发布XX预警信号」，两行右对齐，无署名时不显示。均随画面尺寸自适应。</p>
       </div>
 
       <div class="card">
-        <h2>音画对齐</h2>
-        <div class="field">
+        <h2>合成输出</h2>
+        <div class="field" style="margin-top:0">
           <label>语音比视频长时</label>
           <div class="segs" data-group="overflow">
             <div class="seg on" data-v="loop">循环画面（快）</div>
