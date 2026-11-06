@@ -429,7 +429,7 @@ def render_corner_png(
     outdir: str = ".",
 ) -> tuple[str, int, int]:
     """
-    右上角两行小标题：半透明黑底 + 右对齐白字，渲染为一张透明底 PNG。
+    右上角两行小标题：无底板，白字 + 黑描边（描边保证浅色画面上可读），渲染为透明底 PNG。
     返回 (png 路径, 叠放 x, 叠放 y)。
     """
     if not lines:
@@ -450,10 +450,10 @@ def render_corner_png(
     png = _render_block(
         lines, int(fontsize), int(round(box_w)), int(round(box_h)),
         align="right",
-        box_rgba=(0, 0, 0, int(round(0.45 * 255))),
+        box_rgba=None,
         pad_h=int(round(pad_h)), pad_v=int(round(pad_v)),
-        line_h=int(round(line_h)), border_ratio=0.05,
-        border_alpha=int(round(0.30 * 255)),
+        line_h=int(round(line_h)), border_ratio=0.06,
+        border_alpha=int(round(0.55 * 255)),
         text_alpha=int(round(0.98 * 255)),
         outdir=outdir, prefix="title",
     )

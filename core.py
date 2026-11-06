@@ -480,7 +480,7 @@ class RenderOptions:
     """合成时的对齐策略。"""
 
     overflow: str = "loop"      # 语音长于视频：loop=循环画面 / freeze=定格末帧
-    underflow: str = "pad"      # 语音短于视频：pad=画面保留+尾部静音 / trim=画面裁到语音长度
+    underflow: str = "trim"     # 语音短于视频：pad=画面保留+尾部静音 / trim=画面裁到语音长度
     resolution: str = "source"  # source / 1080 / 720
 
 
@@ -491,7 +491,7 @@ class TextStyle:
     enabled: bool = True
     text: str = ""
     size: str = "medium"        # small / medium / large
-    opacity: float = 0.55       # 灰色底板不透明度
+    opacity: float = 0.30       # 灰色底板不透明度
     workdir: str | None = None
 
 
@@ -611,7 +611,7 @@ def build_video(
     t_fs = 0
     top_bottom = 0.0
     if (corner_text or "").strip():
-        t_fs = max(14, int(round(out_w / 20)))
+        t_fs = max(14, int(round(out_w / 18)))
         lines_top = caption.split_title_lines(corner_text)
         t_lines = len(lines_top)
         wd = workdir or style.workdir or tempfile.mkdtemp(prefix="ttslines_")
@@ -805,11 +805,11 @@ def generate(
     rate: int = 0,
     volume: int = 0,
     overflow: str = "loop",
-    underflow: str = "pad",
+    underflow: str = "trim",
     resolution: str = "source",
     caption_enabled: bool = True,
     caption_size: str = "medium",
-    caption_opacity: float = 0.55,
+    caption_opacity: float = 0.30,
     signal_enabled: bool = True,
     signal_size: float | None = None,
     title_enabled: bool = True,
@@ -971,11 +971,11 @@ if __name__ == "__main__":
     ap.add_argument("--rate", type=int, default=0)
     ap.add_argument("--volume", type=int, default=0)
     ap.add_argument("--overflow", default="loop", choices=["loop", "freeze"])
-    ap.add_argument("--underflow", default="pad", choices=["pad", "trim"])
+    ap.add_argument("--underflow", default="trim", choices=["pad", "trim"])
     ap.add_argument("--resolution", default="source", choices=["source", "1080", "720"])
     ap.add_argument("--no-caption", action="store_true", help="不在画面上叠加文字")
     ap.add_argument("--caption-size", default="medium", choices=["small", "medium", "large"])
-    ap.add_argument("--caption-opacity", type=float, default=0.55)
+    ap.add_argument("--caption-opacity", type=float, default=0.30)
     ap.add_argument("--no-signal", action="store_true", help="不叠加预警图标")
     ap.add_argument("--signal-size", type=float, default=None,
                     help="图标宽度占画面宽度的比例，如 0.22（默认 0.16）")

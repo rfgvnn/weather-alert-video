@@ -61,11 +61,11 @@ class GenerateRequest(BaseModel):
     rate: int = 0
     volume: int = 0
     overflow: str = "loop"
-    underflow: str = "pad"
+    underflow: str = "trim"
     resolution: str = "source"
     caption: bool = True
     caption_size: str = "medium"
-    caption_opacity: float = 0.55
+    caption_opacity: float = 0.30
     signal: bool = True
     signal_size: float | None = None
     title: bool = True
@@ -97,18 +97,34 @@ def api_voices(engine: str | None = None):
     }
 
 
+# 视频探测结果缓存：键为路径，值为 (文件修改时间, 信息)。文件被替换后自动重新探测。
+_VIDEO_INFO_CACHE: dict[str, tuple[float, dict | None]] = {}
+
+
+def _video_info_cached(path: str) -> dict | None:
+    try:
+        mt = os.path.getmtime(path)
+    except OSError:
+        return None
+    hit = _VIDEO_INFO_CACHE.get(path)
+    if hit and hit[0] == mt:
+        return hit[1]
+    info = None
+    try:
+        vi = core.inspect_video(path)
+        info = {"duration": round(vi.duration, 2), "width": vi.width, "height": vi.height}
+    except Exception:  # noqa: BLE001
+        info = None
+    _VIDEO_INFO_CACHE[path] = (mt, info)
+    return info
+
+
 @app.get("/api/config")
 def api_config():
     rules = []
     for r in core.load_rules():
         exists = os.path.exists(r["video"])
-        info = None
-        if exists:
-            try:
-                vi = core.inspect_video(r["video"])
-                info = {"duration": round(vi.duration, 2), "width": vi.width, "height": vi.height}
-            except Exception:  # noqa: BLE001
-                info = None
+        info = _video_info_cached(r["video"]) if exists else None
         rules.append({
             "keyword": r["keyword"],
             "keywords": r["keywords"],

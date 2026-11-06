@@ -45,22 +45,22 @@
   header h1{font-size:20px;font-weight:700;letter-spacing:.3px}
   header p{font-size:13px;color:var(--muted)}
 
-  .rules{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px;margin-bottom:10px}
+  .rules{display:grid;grid-template-columns:repeat(auto-fill,minmax(175px,1fr));gap:8px;margin-bottom:10px}
   .rule{
     background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);
-    padding:14px 16px;display:flex;align-items:center;gap:12px;transition:.25s;
+    padding:8px 12px;display:flex;align-items:center;gap:9px;transition:.25s;
     box-shadow:var(--shadow);
   }
-  .rule .kw{font-size:17px;font-weight:700;letter-spacing:1px;color:var(--kw)}
-  .rule .desc{font-size:12px;color:var(--muted)}
-  .rule .alias{font-size:11px;color:var(--muted);margin-top:2px}
+  .rule .kw{font-size:14.5px;font-weight:700;letter-spacing:.5px;color:var(--kw)}
+  .rule .desc{font-size:11px;color:var(--muted)}
+  .rule .alias{font-size:10.5px;color:var(--muted);margin-top:1px}
   .rule.miss{opacity:.55}
   .rule.hit{border-color:var(--kw);transform:translateY(-2px);background:var(--kwbg);
     box-shadow:0 8px 22px -8px rgba(16,24,40,.18)}
-  .dot{width:9px;height:9px;border-radius:50%;background:var(--kw);opacity:.35;flex:none}
-  .rule.hit .dot{opacity:1;box-shadow:0 0 0 4px rgba(0,0,0,.05)}
-  .rule .meta{margin-left:auto;text-align:right;font-size:11px;color:var(--muted);line-height:1.4}
-  .ruletools{display:flex;align-items:center;gap:8px;margin-bottom:20px;flex-wrap:wrap}
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--kw);opacity:.35;flex:none}
+  .rule.hit .dot{opacity:1;box-shadow:0 0 0 3px rgba(0,0,0,.05)}
+  .rule .meta{margin-left:auto;text-align:right;font-size:10.5px;color:var(--muted);line-height:1.35}
+  .ruletools{display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap}
   .ruletools .path{font-size:11.5px;color:var(--muted);font-family:Consolas,monospace;
     overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:52%}
   .ruletools button{font-size:12px;padding:6px 12px;border-radius:9px}
@@ -141,7 +141,7 @@
     font-family:inherit;font-size:14px;border-radius:11px;padding:11px 18px;cursor:pointer;
     border:1px solid var(--border);background:#fff;color:var(--text);transition:.18s;
   }
-  button:hover:not(:disabled){border-color:#c7d0dd;background:#fafbfc}
+  button:hover:not(:disabled):not(.btn-primary){border-color:#c7d0dd;background:#fafbfc}
   button:disabled{opacity:.5;cursor:not-allowed}
   .btn-primary{
     background:linear-gradient(135deg,#2563eb,#4f46e5);color:#fff;border-color:transparent;
@@ -275,8 +275,8 @@
             </div>
           </div>
           <div class="field">
-            <label>底板深浅 <span class="rangeval" id="opVal">55%</span></label>
-            <input type="range" id="opacity" min="15" max="85" value="55" step="5" />
+            <label>底板深浅 <span class="rangeval" id="opVal">30%</span></label>
+            <input type="range" id="opacity" min="15" max="85" value="30" step="5" />
           </div>
         </div>
         <div class="divider"></div>
@@ -302,8 +302,8 @@
         <div class="field">
           <label>语音比视频短时</label>
           <div class="segs" data-group="underflow">
-            <div class="seg on" data-v="pad">保留完整画面 + 尾部静音</div>
-            <div class="seg" data-v="trim">画面裁到语音长度</div>
+            <div class="seg" data-v="pad">保留完整画面 + 尾部静音</div>
+            <div class="seg on" data-v="trim">画面裁到语音长度</div>
           </div>
         </div>
         <div class="field">
@@ -355,7 +355,7 @@ const el = {
   rulesPath:$('#rulesPath'), rulesHint:$('#rulesHint'),
   engine:$('#engine'), engineNote:$('#engineNote')
 };
-const opt = { overflow:'loop', underflow:'pad', resolution:'source', caption:'yes', captionSize:'medium', title:'yes' };
+const opt = { overflow:'loop', underflow:'trim', resolution:'source', caption:'yes', captionSize:'medium', title:'yes' };
 let rulesCache = [];
 let signalsCache = [];
 let engineId = 'edge';
@@ -501,6 +501,7 @@ el.text.addEventListener('keydown', e=>{
 el.rate.addEventListener('input', ()=> el.rateVal.textContent = el.rate.value+'%' );
 el.vol.addEventListener('input', ()=> el.volVal.textContent = el.vol.value+'%' );
 const opSlider = $('#opacity');
+$('#opVal').textContent = opSlider.value+'%';   // 初始数值跟随滑杆，避免两处写死不同步
 opSlider.addEventListener('input', ()=> $('#opVal').textContent = opSlider.value+'%' );
 document.querySelectorAll('.segs').forEach(g=>{
   g.addEventListener('click', e=>{
@@ -656,8 +657,7 @@ async function loadHistory(){
 el.btnFolder.addEventListener('click', ()=> fetch('/api/open-folder',{method:'POST'}));
 
 (async function init(){
-  await loadEngines();
-  await loadConfig();
+  await Promise.all([loadEngines(), loadConfig()]);
   loadHistory();
 })();
 </script>
