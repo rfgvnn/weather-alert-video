@@ -491,7 +491,7 @@ class TextStyle:
     enabled: bool = True
     text: str = ""
     size: str = "medium"        # small / medium / large
-    opacity: float = 0.30       # 灰色底板不透明度
+    opacity: float = 0.40       # 黑色底板不透明度
     workdir: str | None = None
 
 
@@ -555,7 +555,7 @@ def target_size(info: VideoInfo, opts: RenderOptions) -> tuple[int, int]:
 
 
 def font_size(width: int, size: str = "medium") -> int:
-    return max(14, int(round(width / 22 * SIZE_SCALE.get(size, 1.0))))
+    return max(14, int(round(width / 18 * SIZE_SCALE.get(size, 1.0))))
 
 
 def build_video(
@@ -809,7 +809,7 @@ def generate(
     resolution: str = "source",
     caption_enabled: bool = True,
     caption_size: str = "medium",
-    caption_opacity: float = 0.30,
+    caption_opacity: float = 0.40,
     signal_enabled: bool = True,
     signal_size: float | None = None,
     title_enabled: bool = True,
@@ -975,7 +975,7 @@ if __name__ == "__main__":
     ap.add_argument("--resolution", default="source", choices=["source", "1080", "720"])
     ap.add_argument("--no-caption", action="store_true", help="不在画面上叠加文字")
     ap.add_argument("--caption-size", default="medium", choices=["small", "medium", "large"])
-    ap.add_argument("--caption-opacity", type=float, default=0.30)
+    ap.add_argument("--caption-opacity", type=float, default=0.40)
     ap.add_argument("--no-signal", action="store_true", help="不叠加预警图标")
     ap.add_argument("--signal-size", type=float, default=None,
                     help="图标宽度占画面宽度的比例，如 0.22（默认 0.16）")

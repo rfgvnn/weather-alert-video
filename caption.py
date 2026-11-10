@@ -18,6 +18,24 @@ import unicodedata
 _BUNDLED_FONT = os.path.join(
     os.path.dirname(os.path.abspath(__file__)), "fonts", "wqy-microhei.ttc"
 )
+# 正文专用字体：思源宋体（Source Han Serif，SIL OFL 开源可分发），粗体更适配视频
+_BUNDLED_SERIF = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "fonts", "SourceHanSerifCN-Bold.otf"
+)
+SERIF_CANDIDATES = [
+    (_BUNDLED_SERIF, "思源宋体 粗体（自带）"),
+    # Windows 系统宋体兜底
+    (r"C:\Windows\Fonts\simsun.ttc", "宋体"),
+    (r"C:\Windows\Fonts\STSONG.TTF", "华文宋体"),
+    # Linux 的 Noto Serif CJK（与思源宋体同源同字形）
+    ("/usr/share/fonts/opentype/noto/NotoSerifCJK-Bold.ttc", "Noto Serif CJK Bold"),
+    ("/usr/share/fonts/opentype/noto/NotoSerifCJK-Regular.ttc", "Noto Serif CJK"),
+    ("/usr/share/fonts/opentype/noto/NotoSerifCJKsc-Bold.otf", "Noto Serif CJK SC Bold"),
+    ("/usr/share/fonts/opentype/noto/NotoSerifCJKsc-Regular.otf", "Noto Serif CJK SC"),
+    ("/usr/share/fonts/truetype/noto/NotoSerifCJK-Bold.ttc", "Noto Serif CJK Bold"),
+    # macOS
+    ("/System/Library/Fonts/Supplemental/Songti.ttc", "宋体-简"),
+]
 FONT_CANDIDATES = [
     # Windows
     (r"C:\Windows\Fonts\msyhbd.ttc", "微软雅黑 粗体"),
@@ -109,6 +127,14 @@ def pick_font() -> str:
     if p:
         return p
     raise RuntimeError(INSTALL_HINT)
+
+
+def pick_serif_font() -> str:
+    """正文用宋体：优先项目自带的思源宋体，其次系统宋体，都没有则回退黑体。"""
+    for path, _name in SERIF_CANDIDATES:
+        if os.path.exists(path):
+            return path
+    return pick_font()
 
 
 def char_units(ch: str) -> float:
@@ -276,10 +302,10 @@ def write_merged_file(lines: list[str], outdir: str) -> str:
     return p
 
 
-def _load_font(fs: int):
+def _load_font(fs: int, path: str | None = None):
     from PIL import ImageFont
 
-    return ImageFont.truetype(pick_font(), fs)
+    return ImageFont.truetype(path or pick_font(), fs)
 
 
 def _render_block(
@@ -298,11 +324,12 @@ def _render_block(
     text_alpha: int,
     outdir: str,
     prefix: str,
+    font_path: str | None = None,
 ) -> str:
     """把文字块渲染成透明底 PNG（半透明底板可选、描边可选），返回文件路径。"""
     from PIL import Image, ImageDraw
 
-    font = _load_font(fs)
+    font = _load_font(fs, font_path)
     sw = max(1, int(round(fs * border_ratio)))
     os.makedirs(outdir, exist_ok=True)
     png = os.path.join(outdir, f"{prefix}.png")
@@ -334,12 +361,12 @@ def render_caption_png(
     lines: list[str],
     fontsize: int,
     opacity: float,
-    bg_rgb: tuple[int, int, int] = (0x40, 0x40, 0x40),
+    bg_rgb: tuple[int, int, int] = (0x00, 0x00, 0x00),
     min_y: float = 0.0,
     outdir: str = ".",
 ) -> tuple[str, int, int]:
     """
-    正文文字块：半透明灰底板 + 白字黑描边，渲染为一张透明底 PNG。
+    正文文字块：半透明黑底板 + 白字黑描边，渲染为一张透明底 PNG。
     返回 (png 路径, 叠放 x, 叠放 y)。
     min_y：底板允许的最高位置（顶部有标题/图标时传入，避免重叠，超出则整体下移）。
     """
@@ -370,7 +397,7 @@ def render_caption_png(
         line_h=int(round(line_h)), border_ratio=0.045,
         border_alpha=int(round(0.25 * 255)),
         text_alpha=int(round(0.98 * 255)),
-        outdir=outdir, prefix="caption",
+        outdir=outdir, prefix="caption", font_path=pick_serif_font(),
     )
     return png, int(round(box_x)), int(round(box_y))
 

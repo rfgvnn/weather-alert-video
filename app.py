@@ -65,7 +65,7 @@ class GenerateRequest(BaseModel):
     resolution: str = "source"
     caption: bool = True
     caption_size: str = "medium"
-    caption_opacity: float = 0.30
+    caption_opacity: float = 0.40
     signal: bool = True
     signal_size: float | None = None
     title: bool = True
