@@ -112,8 +112,15 @@ DEFAULT_RULES: dict[str, Any] = {
         "icon：图标文件路径，可写绝对路径或相对 app 目录，例如 signals/FOGW_O.gif。",
         "归属自动判断：图标关键词里包含哪个视频的关键词，就贴到哪个视频的成片上；",
         "  也可以用 attach 手动指定，如 { \"keywords\":[\"大风蓝色\"], \"icon\":\"signals/GALE_B.gif\", \"attach\":\"大风\" }。",
-        "size：图标宽度占画面宽度的比例，可省略（默认 0.16）。",
+        "size：图标宽度占画面宽度的比例，可省略（默认 0.33）。",
+        "icon_defaults：全局图标默认值（size / margin_x / margin_y / margin），",
+        "  对所有图标统一生效；单条图标里写了同名字段时以单条为准。",
     ],
+    "icon_defaults": {
+        "size": 0.33,
+        "margin_x": 0.05,
+        "margin_y": 0.08,
+    },
     "rules": [
         {"keywords": ["大雾"], "video": os.path.join(DOWNLOADS, "大雾.mp4"), "label": "大雾", "tag": "大雾"},
         {"keywords": ["雷电"], "video": os.path.join(DOWNLOADS, "雷电.mp4"), "label": "雷电", "tag": "雷电"},
@@ -189,7 +196,7 @@ def _normalize_rule(raw: dict[str, Any]) -> dict[str, Any] | None:
     }
 
 
-def _normalize_signal(raw: dict[str, Any]) -> dict[str, Any] | None:
+def _normalize_signal(raw: dict[str, Any], defaults: dict[str, Any] | None = None) -> dict[str, Any] | None:
     if not isinstance(raw, dict):
         return None
     kws = raw.get("keywords")
@@ -204,6 +211,7 @@ def _normalize_signal(raw: dict[str, Any]) -> dict[str, Any] | None:
     icon = _resolve_path(str(raw.get("icon", "")), SIGNAL_DIR)
     if not icon:
         return None
+    defaults = defaults or {}
     def frac(key: str, default: float, lo: float, hi: float) -> float:
         v = raw.get(key)
         if v is None or v == "":
@@ -214,8 +222,32 @@ def _normalize_signal(raw: dict[str, Any]) -> dict[str, Any] | None:
             v = default
         return min(hi, max(lo, v))
 
-    # margin 是简写：只写一个数就同时表示距左、距上边距
+    # 图标大小与边距：先取全局 icon_defaults，再让单条图标里的同名字段覆盖
+    gd_size = defaults.get("size")
+    try:
+        gd_size = float(gd_size) if gd_size not in (None, "") else 0.33
+    except (TypeError, ValueError):
+        gd_size = 0.33
+    gd_size = min(0.5, max(0.05, gd_size))
+
     dflt_x, dflt_y = 0.05, 0.08
+    gd = defaults.get("margin")
+    if gd not in (None, ""):
+        try:
+            gd_m = float(gd)
+            dflt_x = dflt_y = min(0.9, max(0.0, gd_m))
+        except (TypeError, ValueError):
+            pass
+    try:
+        dflt_x = min(0.9, max(0.0, float(defaults.get("margin_x", dflt_x))))
+    except (TypeError, ValueError):
+        pass
+    try:
+        dflt_y = min(0.9, max(0.0, float(defaults.get("margin_y", dflt_y))))
+    except (TypeError, ValueError):
+        pass
+
+    # 单条图标自己的 margin 简写优先于全局默认
     margin = raw.get("margin")
     if margin not in (None, ""):
         try:
@@ -228,7 +260,7 @@ def _normalize_signal(raw: dict[str, Any]) -> dict[str, Any] | None:
         "keyword": kws[0],                      # 兼容旧字段
         "icon": icon,
         "attach": str(raw.get("attach") or "").strip(),
-        "size": frac("size", 0.33, 0.05, 0.5),
+        "size": frac("size", gd_size, 0.05, 0.5),
         "margin_x": frac("margin_x", dflt_x, 0.0, 0.9),
         "margin_y": frac("margin_y", dflt_y, 0.0, 0.9),
         "label": str(raw.get("label") or kws[0]).strip(),
@@ -268,6 +300,9 @@ def _load_config(force: bool = False) -> tuple[list[dict[str, Any]], list[dict[s
     signals: list[dict[str, Any]] = []
     try:
         data = _read_json_tolerant(RULES_FILE)
+        icon_defaults = data.get("icon_defaults", {}) if isinstance(data, dict) else {}
+        if not isinstance(icon_defaults, dict):
+            icon_defaults = {}
         raw_list = data.get("rules", []) if isinstance(data, dict) else data
         for raw in raw_list or []:
             rule = _normalize_rule(raw)
@@ -275,13 +310,13 @@ def _load_config(force: bool = False) -> tuple[list[dict[str, Any]], list[dict[s
                 rules.append(rule)
         if isinstance(data, dict):
             for raw in data.get("signals") or []:
-                sig = _normalize_signal(raw)
+                sig = _normalize_signal(raw, icon_defaults)
                 if sig:
                     signals.append(sig)
     except Exception:  # noqa: BLE001
         # 配置坏了也要让服务能用：退回内置默认规则
         rules = [r for r in (_normalize_rule(x) for x in DEFAULT_RULES["rules"]) if r]
-        signals = [s for s in (_normalize_signal(x) for x in DEFAULT_RULES.get("signals", [])) if s]
+        signals = [s for s in (_normalize_signal(x, DEFAULT_RULES.get("icon_defaults")) for x in DEFAULT_RULES.get("signals", [])) if s]
 
     _rules_cache["mtime"] = mtime
     _rules_cache["rules"] = rules
@@ -568,6 +603,7 @@ def build_video(
     style: TextStyle | None = None,
     signal: SignalStyle | None = None,
     corner_text: str = "",
+    date_text: str = "",
     workdir: str | None = None,
 ) -> dict[str, Any]:
     """
@@ -606,24 +642,10 @@ def build_video(
     # overlay 则到处都有）。overlays 依 (png 路径, x, y) 顺序叠放。
     overlays: list[tuple[str, int, int]] = []
 
-    # ---- 右上角标题：XX气象台发布XX预警信号（先算几何，供正文避让）----
-    t_lines = 0
-    t_fs = 0
-    top_bottom = 0.0
-    if (corner_text or "").strip():
-        t_fs = max(14, int(round(out_w / 18)))
-        lines_top = caption.split_title_lines(corner_text)
-        t_lines = len(lines_top)
-        wd = workdir or style.workdir or tempfile.mkdtemp(prefix="ttslines_")
-        png, px, py = caption.render_corner_png(
-            out_w, out_h, lines_top, t_fs, outdir=os.path.join(wd, "title")
-        )
-        overlays.append((png, px, py))
-        top_bottom = caption.CORNER_MARGIN_Y * out_h + caption.corner_box_height(len(lines_top), t_fs)
-
-    # ---- 左上角预警图标 ----
+    # ---- 左上角预警图标（先算几何：供标题垂直对齐与正文避让）----
     icon = signal if (signal and signal.path and os.path.exists(signal.path)) else None
-    ico_w = ico_h = mx = 0
+    ico_w = ico_h = mx = my = 0
+    icon_bottom = 0.0
     if icon:
         try:
             src_w, src_h = probe_image_size(icon.path)
@@ -633,7 +655,35 @@ def build_video(
         ico_h = max(4, int(round(ico_w * src_h / src_w / 2)) * 2)
         mx = max(2, int(round(out_w * icon.margin_x)))
         my = max(2, int(round(out_h * icon.margin_y)))
-        top_bottom = max(top_bottom, my + ico_h)
+        icon_bottom = my + ico_h
+
+    # ---- 右上角标题：XX气象台发布XX预警信号（位置固定，不随图标移动）----
+    t_lines = 0
+    t_fs = 0
+    top_bottom = icon_bottom
+    if (corner_text or "").strip():
+        t_fs = max(14, int(round(out_w / 18)))
+        lines_top = caption.split_title_lines(corner_text)
+        t_lines = len(lines_top)
+        wd = workdir or style.workdir or tempfile.mkdtemp(prefix="ttslines_")
+        png, px, py = caption.render_corner_png(
+            out_w, out_h, lines_top, t_fs,
+            outdir=os.path.join(wd, "title")
+        )
+        overlays.append((png, px, py))
+        top_bottom = max(top_bottom, py + caption.corner_box_height(t_lines, t_fs))
+
+    # ---- 发布日期：画面上方 30% 处水平居中（从输入文本提取，如 2026年11月12日）----
+    if (date_text or "").strip():
+        wd = workdir or style.workdir or tempfile.mkdtemp(prefix="ttslines_")
+        d_fs = max(14, int(round(out_w / 22)))
+        png, dw, dh = caption.render_date_png(
+            date_text, d_fs, outdir=os.path.join(wd, "date")
+        )
+        dx = (out_w - dw) // 2
+        dy = int(round(out_h * caption.DATE_TOP_RATIO))
+        overlays.append((png, dx, dy))
+        top_bottom = max(top_bottom, dy + dh)
 
     # ---- 画面中央文字（顶部有标题/图标时整体下移避让）----
     n_lines = 0
@@ -905,6 +955,8 @@ def generate(
                 ico_size = min(0.5, max(0.05, float(signal_size)))
             sig = SignalStyle(
                 path=sig_raw["icon"], label=sig_raw["label"], size=ico_size,
+                margin_x=sig_raw.get("margin_x", 0.05),
+                margin_y=sig_raw.get("margin_y", 0.08),
             )
         else:
             sig = None
@@ -915,10 +967,13 @@ def generate(
             extras += "，正在叠加画面文字"
         if corner_title:
             extras += f"，右上角标题「{corner_title}」"
+        date_text = caption.extract_date(text)
+        if date_text:
+            extras += f"，发布日期「{date_text}」"
         tick(p0 + 10, f"正在合成 → {rule['label']}（{strategy}{extras}）")
         render = build_video(
             rule["video"], audio_path, out_path, info, audio_dur, opts, style, sig,
-            corner_text=corner_title, workdir=tmpdir,
+            corner_text=corner_title, date_text=date_text, workdir=tmpdir,
         )
 
         if not os.path.exists(out_path) or os.path.getsize(out_path) == 0:

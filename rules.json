@@ -14,11 +14,19 @@
     "icon ：图标文件路径，可写绝对路径或相对 app 目录，例如 signals/FOGW_O.gif。",
     "归属自动判断：图标关键词里包含哪个视频的关键词（如“大雾橙色”包含“大雾”），就贴到哪个视频的成片上；",
     "  也可以用 attach 手动指定，如 { \"keywords\":[\"大风蓝色\"], \"icon\":\"signals/GALE_B.gif\", \"attach\":\"大风\" }。",
-    "size     ：图标宽度占画面宽度的比例，可省略（默认 0.33，即 33%，范围 0.05~0.5）。",
-    "margin_x ：距左边缘的距离，占画面宽度的比例，可省略（默认 0.05，即 5%）。",
-    "margin_y ：距上边缘的距离，占画面高度的比例，可省略（默认 0.08，即 8%）。",
-    "margin   ：简写，只写一个数就同时设定距左、距上，例如 \"margin\": 0.06。"
+    "size     ：图标宽度占画面宽度的比例，可省略（默认取 icon_defaults 里的 size，范围 0.05~0.5）。",
+    "margin_x ：距左边缘的距离，占画面宽度的比例，可省略（默认取 icon_defaults 里的 margin_x）。",
+    "margin_y ：距上边缘的距离，占画面高度的比例，可省略（默认取 icon_defaults 里的 margin_y）。",
+    "margin   ：简写，只写一个数就同时设定距左、距上，例如 \"margin\": 0.06。",
+    "",
+    "icon_defaults：所有图标的统一默认值。想一起调整全部图标的大小/位置，只改这里即可；",
+    "  个别图标需要不同时，再在那条图标里单独写同名字段覆盖。"
   ],
+  "icon_defaults": {
+    "size": 0.33,
+    "margin_x": 0.08,
+    "margin_y": 0.1
+  },
   "rules": [
     {
       "keywords": [
@@ -99,30 +107,21 @@
         "大雾黄色"
       ],
       "icon": "signals/FOGW_Y.gif",
-      "label": "大雾黄色预警",
-      "size": 0.33,
-      "margin_x": 0.05,
-      "margin_y": 0.08
+      "label": "大雾黄色预警"
     },
     {
       "keywords": [
         "大雾橙色"
       ],
       "icon": "signals/FOGW_O.gif",
-      "label": "大雾橙色预警",
-      "size": 0.33,
-      "margin_x": 0.05,
-      "margin_y": 0.08
+      "label": "大雾橙色预警"
     },
     {
       "keywords": [
         "大风蓝色"
       ],
       "icon": "signals/GALE_B.gif",
-      "label": "大风蓝色预警",
-      "size": 0.33,
-      "margin_x": 0.05,
-      "margin_y": 0.08
+      "label": "大风蓝色预警"
     }
   ]
 }

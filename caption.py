@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import math
 import os
+import re
 import shutil
 import subprocess
 import unicodedata
@@ -83,6 +84,21 @@ INSTALL_HINT = (
 # 行首禁则：这些字符不能出现在行首
 _NO_LINE_START = "，。、；：？！》）】」』…·,%!?;:.)]}>,》"
 
+# 行尾断行点：这些标点出现在行尾时是自然的断行位置
+_BREAK_AFTER = "。！？；，、!?;,"
+
+# 正文文字块的行距：行高 = 字号 × 此倍数（1.0 为紧贴，越大越松）
+CAPTION_LINE_SPACING = 1.2
+
+# 正文文字块底板底边距画面下边界的比例
+CAPTION_BOTTOM_MARGIN = 0.15
+
+# 发布日期文字距画面上边界的比例
+DATE_TOP_RATIO = 0.25
+
+# 日期提取：匹配"2026年11月12日"这类写法
+_DATE_RE = re.compile(r"\d{4}年\d{1,2}月\d{1,2}日")
+
 
 def _fc_match_zh() -> str | None:
     """用 fontconfig 查询系统默认中文字体（Linux 上最可靠）。"""
@@ -137,6 +153,28 @@ def pick_serif_font() -> str:
     return pick_font()
 
 
+# 右上角标题专用：思源黑体粗体（Source Han Sans，SIL OFL 开源可分发），随项目分发保证各端一致
+_BUNDLED_HEI = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "fonts", "SourceHanSansCN-Bold.otf"
+)
+HEI_CANDIDATES = [
+    (_BUNDLED_HEI, "思源黑体 粗体（自带）"),
+    (r"C:\Windows\Fonts\simhei.ttf", "黑体"),
+    (r"C:\Windows\Fonts\SimHei.ttf", "黑体"),
+    # Linux 的 Noto Sans CJK（与思源黑体同源同字形）
+    ("/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc", "Noto Sans CJK Bold"),
+    ("/usr/share/fonts/truetype/noto/NotoSansCJK-Bold.ttc", "Noto Sans CJK Bold"),
+]
+
+
+def pick_hei_font() -> str:
+    """右上角标题用黑体：Windows 黑体 -> Linux Noto Sans -> 回退通用候选。"""
+    for path, _name in HEI_CANDIDATES:
+        if os.path.exists(path):
+            return path
+    return pick_font()
+
+
 def char_units(ch: str) -> float:
     """字符宽度估算单位，以字体大小为基准。全角=1.0。"""
     if ch in " \t":
@@ -183,7 +221,8 @@ def wrap_text(text: str, max_units: float, hard_limit: int = 200) -> list[str]:
     if total <= max_units:
         return [flat]
 
-    n = max(1, int(math.ceil(total / max_units)))
+    # 按 92% 的有效填充率预估行数：留出标点断行/禁则调整的余量，避免末行过短
+    n = max(1, int(math.ceil(total / (max_units * 0.92))))
     target = total / n
     lines: list[str] = []
     cur = ""
@@ -192,13 +231,32 @@ def wrap_text(text: str, max_units: float, hard_limit: int = 200) -> list[str]:
     left = n
 
     for ch, u in seq:
-        # 行首禁则：这些标点不允许出现在行首，直接并到前一行末尾
-        if cur and False:
-            pass
+        # 行首禁则：这些标点不允许出现在行首
         if (not cur) and lines and ch in _NO_LINE_START:
-            lines[-1] += ch
-            remaining -= u
-            continue
+            prev_line = lines[-1]
+            if line_units(prev_line) + u > max_units and len(prev_line) >= 2:
+                # 并入会使前一行超宽：把前一行末尾的字带下来，和标点一起另起一行
+                lines[-1] = prev_line[:-1]
+                cur = prev_line[-1]
+                acc = char_units(prev_line[-1])
+                # ch 由下方正常流程消费
+            else:
+                lines[-1] += ch
+                remaining -= u
+                continue
+
+        # 硬上限：当前行再加这个字符就会超过行宽 → 先收下当前行，字符另起一行
+        if cur and acc + u > max_units:
+            lines.append(cur)
+            cur, acc = "", 0.0
+            if left > 1:
+                left -= 1
+                if left:
+                    target = max(remaining / left, 1.0)
+            elif remaining > max_units:
+                # 行数超出预估：按剩余内容重新规划，避免末行被拉得过长
+                left = max(2, int(math.ceil(remaining / max_units)))
+                target = max(remaining / left, 1.0)
 
         cur += ch
         acc += u
@@ -207,10 +265,11 @@ def wrap_text(text: str, max_units: float, hard_limit: int = 200) -> list[str]:
         if left <= 1 or not cur:
             continue
 
-        prev = cur[-2] if len(cur) >= 2 else ""
-        punct_ok = prev in "。！？；，、!?;,"
+        # 断行时机：宽度达标，或行尾恰好是标点且本行已接近满行（≥85%）。
+        # 标点断行以“行尾是标点”为准——下一行从新词开始，不会把词语拆到两行。
+        punct_ok = cur[-1] in _BREAK_AFTER
         room_ok = remaining <= max_units * (left - 1) * 1.05
-        hit = acc >= target or (punct_ok and acc >= target * 0.78)
+        hit = acc >= target or (punct_ok and acc >= max_units * 0.85)
         if room_ok and hit:
             lines.append(cur)
             left -= 1
@@ -325,6 +384,7 @@ def _render_block(
     outdir: str,
     prefix: str,
     font_path: str | None = None,
+    text_rgb: tuple[int, int, int] = (255, 255, 255),
 ) -> str:
     """把文字块渲染成透明底 PNG（半透明底板可选、描边可选），返回文件路径。"""
     from PIL import Image, ImageDraw
@@ -348,7 +408,8 @@ def _render_block(
         else:
             x = (img.width - tw) / 2 - bbox[0]
         d.text(
-            (x, y), ln, font=font, fill=(255, 255, 255, text_alpha),
+            (x, y), ln, font=font,
+            fill=(text_rgb[0], text_rgb[1], text_rgb[2], text_alpha),
             stroke_width=sw, stroke_fill=(0, 0, 0, border_alpha),
         )
     img.save(png)
@@ -374,7 +435,7 @@ def render_caption_png(
         raise ValueError("lines 为空")
 
     fs = float(fontsize)
-    line_h = fs * 1.62
+    line_h = fs * CAPTION_LINE_SPACING
     pad_v = fs * 0.72
     pad_h = fs * 0.95
 
@@ -382,12 +443,15 @@ def render_caption_png(
     box_w = min(width * 0.92, max_units * fs + pad_h * 2)
     box_h = len(lines) * line_h + pad_v * 2
     box_x = (width - box_w) / 2
-    box_y = (height - box_h) / 2
-    if box_h < height * 0.98:
-        if min_y > 0:
-            box_y = max(box_y, min_y)
-        # 底部留 1.5% 安全边距；若与避让下限冲突，优先避让
-        box_y = min(box_y, max(min_y, height * 0.985 - box_h))
+    # 底板底边固定距画面下边界 13%
+    box_y = height * (1.0 - CAPTION_BOTTOM_MARGIN) - box_h
+    if min_y > 0:
+        box_y = max(box_y, min_y)
+    # 避让冲突时最多贴到距底部 1.5% 处
+    box_y = min(box_y, max(min_y, height * 0.985 - box_h))
+    if box_y < 0:
+        # 文字块过高放不下时回退为整体居中
+        box_y = max(0.0, (height - box_h) / 2)
 
     png = _render_block(
         lines, int(fontsize), int(round(box_w)), int(round(box_h)),
@@ -402,6 +466,41 @@ def render_caption_png(
     return png, int(round(box_x)), int(round(box_y))
 
 
+def extract_date(text: str) -> str:
+    """从文本中提取发布日期（如"2026年11月12日"），找不到返回空串。"""
+    m = _DATE_RE.search(text or "")
+    return m.group(0) if m else ""
+
+
+def render_date_png(text: str, fontsize: int, outdir: str = ".") -> tuple[str, int, int]:
+    """
+    发布日期条：单行白字黑描边（黑体），渲染为透明底 PNG。
+    返回 (png 路径, 宽, 高)，水平居中由调用方按画面宽度计算。
+    """
+    from PIL import Image, ImageDraw
+
+    fs = int(fontsize)
+    font = _load_font(fs, pick_hei_font())
+    sw = max(1, int(round(fs * 0.06)))
+    pad = int(round(fs * 0.55))
+
+    os.makedirs(outdir, exist_ok=True)
+    probe = ImageDraw.Draw(Image.new("RGBA", (4, 4)))
+    bbox = probe.textbbox((0, 0), text, font=font, stroke_width=sw)
+    tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
+
+    img = Image.new("RGBA", (tw + pad * 2, th + pad * 2), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    d.text(
+        (pad - bbox[0], pad - bbox[1]), text, font=font,
+        fill=(255, 255, 255, int(round(0.98 * 255))),
+        stroke_width=sw, stroke_fill=(0, 0, 0, int(round(0.55 * 255))),
+    )
+    png = os.path.join(outdir, "date.png")
+    img.save(png)
+    return png, img.width, img.height
+
+
 def _read_all(paths: list[str]) -> list[str]:
     out = []
     for p in paths:
@@ -413,7 +512,7 @@ def _read_all(paths: list[str]) -> list[str]:
 # ---------------------------------------------------------------- 右上角标题
 
 # 右上角标题的默认边距（占画面宽/高的比例），供避让计算复用
-CORNER_MARGIN_X = 0.1
+CORNER_MARGIN_X = 0.08
 CORNER_MARGIN_Y = 0.12
 
 
@@ -454,9 +553,12 @@ def render_corner_png(
     margin_x: float = CORNER_MARGIN_X,
     margin_y: float = CORNER_MARGIN_Y,
     outdir: str = ".",
+    y_center: float | None = None,
 ) -> tuple[str, int, int]:
     """
-    右上角两行小标题：无底板，白字 + 黑描边（描边保证浅色画面上可读），渲染为透明底 PNG。
+    右上角两行小标题：无底板，黑体白字 + 黑描边，渲染为透明底 PNG。
+    y_center：指定时，文字块垂直中心对齐到该高度（用于与左上角图标居中）；
+    不指定时按默认上边距放置。均不会高于默认上边距。
     返回 (png 路径, 叠放 x, 叠放 y)。
     """
     if not lines:
@@ -474,6 +576,10 @@ def render_corner_png(
     my = height * margin_y
     box_x = width - box_w - mx
 
+    box_y = my
+    if y_center is not None:
+        box_y = max(box_y, y_center - box_h / 2)
+
     png = _render_block(
         lines, int(fontsize), int(round(box_w)), int(round(box_h)),
         align="right",
@@ -482,6 +588,7 @@ def render_corner_png(
         line_h=int(round(line_h)), border_ratio=0.06,
         border_alpha=int(round(0.55 * 255)),
         text_alpha=int(round(0.98 * 255)),
-        outdir=outdir, prefix="title",
+        outdir=outdir, prefix="title", font_path=pick_hei_font(),
+        text_rgb=(255, 214, 0),
     )
-    return png, int(round(box_x)), int(round(my))
+    return png, int(round(box_x)), int(round(box_y))
